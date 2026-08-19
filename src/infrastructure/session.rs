@@ -43,4 +43,14 @@ impl StoredSession {
         let dir = super::config::Config::config_dir();
         dir.join(format!("session-{}.json", profile))
     }
+
+    /// 删除本地会话文件，返回文件是否存在。
+    pub fn remove(path: &Path) -> anyhow::Result<bool> {
+        if path.exists() {
+            std::fs::remove_file(path)?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
 }

@@ -14,12 +14,17 @@ pub async fn run() -> ExitCode {
 
     crate::infrastructure::logging::init(cli.verbose);
 
+    let ctx = commands::CommandContext {
+        profile: cli.profile,
+        format: cli.format,
+    };
+
     match cli.command {
-        Commands::Login(cmd) => commands::login::handle(cmd).await,
-        Commands::Logout(cmd) => commands::logout::handle(cmd).await,
-        Commands::Project(cmd) => commands::project::handle(cmd).await,
-        Commands::Task(cmd) => commands::task::handle(cmd).await,
-        Commands::Bug(cmd) => commands::bug::handle(cmd).await,
+        Commands::Login(cmd) => commands::login::handle(cmd, &ctx).await,
+        Commands::Logout(cmd) => commands::logout::handle(cmd, &ctx).await,
+        Commands::Project(cmd) => commands::project::handle(cmd, &ctx).await,
+        Commands::Task(cmd) => commands::task::handle(cmd, &ctx).await,
+        Commands::Bug(cmd) => commands::bug::handle(cmd, &ctx).await,
     }
 }
 

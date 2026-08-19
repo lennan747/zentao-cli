@@ -2,12 +2,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::EntityId;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum BugStatus {
     Active,
     Resolved,
     Closed,
+    #[default]
     #[serde(other)]
     Unknown,
 }
@@ -24,7 +25,7 @@ impl std::fmt::Display for BugStatus {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum BugSeverity {
     #[serde(rename = "1")]
@@ -35,6 +36,7 @@ pub enum BugSeverity {
     Three,
     #[serde(rename = "4")]
     Four,
+    #[default]
     #[serde(other)]
     Unknown,
 }

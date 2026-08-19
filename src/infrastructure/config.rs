@@ -45,6 +45,12 @@ impl Config {
     }
 
     pub fn config_dir() -> PathBuf {
+        // 测试和临时环境可通过 ZENTAO_CLI_HOME 覆盖配置目录。
+        if let Ok(dir) = std::env::var("ZENTAO_CLI_HOME") {
+            if !dir.is_empty() {
+                return PathBuf::from(dir);
+            }
+        }
         directories::ProjectDirs::from("com", "example", "zentao-cli")
             .map(|d| d.config_dir().to_path_buf())
             .unwrap_or_else(|| PathBuf::from(".zentao-cli"))

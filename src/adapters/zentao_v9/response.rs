@@ -8,8 +8,6 @@ use crate::domain::QueryError;
 struct Envelope {
     status: String,
     data: String,
-    #[serde(default)]
-    md5: Option<String>,
 }
 
 /// 解析远端响应体，返回 `data` 字段对应的 JSON `Value`。

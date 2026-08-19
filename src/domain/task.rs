@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::EntityId;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TaskStatus {
     Wait,
@@ -11,6 +11,7 @@ pub enum TaskStatus {
     Paused,
     Cancel,
     Closed,
+    #[default]
     #[serde(other)]
     Unknown,
 }
@@ -30,7 +31,7 @@ impl std::fmt::Display for TaskStatus {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TaskPriority {
     #[serde(rename = "1")]
@@ -41,6 +42,7 @@ pub enum TaskPriority {
     High,
     #[serde(rename = "4")]
     Urgent,
+    #[default]
     #[serde(other)]
     Unknown,
 }

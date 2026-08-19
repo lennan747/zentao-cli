@@ -8,6 +8,10 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 
+use crate::adapters::zentao_v9::ZentaoV9Client;
+use crate::domain::{AuthError, ZentaoError};
+use crate::infrastructure::session::StoredSession;
+
 /// 禅道 CLI
 #[derive(Debug, Parser)]
 #[command(name = "zentao")]
@@ -50,11 +54,36 @@ pub enum OutputFormat {
     Json,
 }
 
+/// 传递给子命令的运行上下文。
+#[derive(Debug, Clone)]
+pub struct CommandContext {
+    pub profile: String,
+    pub format: OutputFormat,
+}
+
 pub fn ok() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-pub fn not_implemented() -> ExitCode {
-    eprintln!("error: command not implemented in skeleton");
-    ExitCode::from(2)
+/// 报告错误并返回对应退出码。
+pub fn fail(err: &ZentaoError) -> ExitCode {
+    crate::cli::report_error(err);
+    crate::cli::exit_code_from_error(err)
+}
+
+/// 从本地会话文件恢复已登录客户端。
+pub fn load_session_client(profile: &str) -> Result<ZentaoV9Client, ZentaoError> {
+    let path = StoredSession::session_path(profile);
+    let session = StoredSession::load(&path)
+        .map_err(|e| ZentaoError::Internal(format!("读取会话失败: {e}")))?
+        .ok_or_else(|| {
+            ZentaoError::Auth(AuthError::Other("尚未登录，请先执行 zentao login".into()))
+        })?;
+
+    let client = ZentaoV9Client::new(&session.server)
+        .map_err(|e| ZentaoError::Internal(format!("创建 HTTP 客户端失败: {e}")))?;
+    client
+        .import_cookies(&session.cookie)
+        .map_err(|_| ZentaoError::Auth(AuthError::Other("会话文件损坏，请重新登录".into())))?;
+    Ok(client)
 }
