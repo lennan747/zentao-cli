@@ -13,8 +13,8 @@ pub use error::{AuthError, QueryError, ZentaoError};
 pub use project::{ProjectDetail, ProjectStatus, ProjectSummary};
 #[allow(unused_imports)]
 pub use task::{
-    TaskDetail, TaskDraft, TaskEdit, TaskFinishParams, TaskNoteParams, TaskPriority, TaskStartParams,
-    TaskStatus, TaskSummary,
+    TaskDetail, TaskDraft, TaskEdit, TaskFinishParams, TaskNoteParams, TaskPriority,
+    TaskStartParams, TaskStatus, TaskSummary,
 };
 
 /// 分页结果。

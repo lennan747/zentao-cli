@@ -187,8 +187,7 @@ fn join_messages<'a>(values: impl Iterator<Item = &'a Value>) -> String {
 
 /// message 里的双引号是包络转义遗留，还原成真实文本。
 fn decode_message_string(s: &str) -> String {
-    serde_json::from_str::<String>(&format!("\"{s}\""))
-        .unwrap_or_else(|_| s.to_string())
+    serde_json::from_str::<String>(&format!("\"{s}\"")).unwrap_or_else(|_| s.to_string())
 }
 
 /// 解析“JS 风格”写响应（评论等接口不返回包络，而是父窗刷新脚本）。
@@ -260,7 +259,8 @@ mod tests {
 
     #[test]
     fn detects_user_deny_redirect() {
-        let body = r#"{"status":"success","data":"{\"locate\":\"https://x/user-deny-task-close.json\"}"}"#;
+        let body =
+            r#"{"status":"success","data":"{\"locate\":\"https://x/user-deny-task-close.json\"}"}"#;
         let err = parse_body(body).unwrap_err();
         assert!(matches!(err, QueryError::Forbidden));
     }

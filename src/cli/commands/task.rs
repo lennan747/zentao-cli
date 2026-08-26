@@ -8,7 +8,8 @@ use crate::application::{TaskGateway, TaskQuery};
 use crate::cli::confirm::{confirm_write, WriteControl, WriteFlags};
 use crate::cli::output;
 use crate::domain::{
-    EntityId, TaskDraft, TaskEdit, TaskFinishParams, TaskNoteParams, TaskStartParams, ZentaoError,
+    EntityId, TaskDraft, TaskEdit, TaskFinishParams, TaskNoteParams, TaskStartParams, TaskStatus,
+    ZentaoError,
 };
 
 #[derive(Debug, Args)]
@@ -169,11 +170,13 @@ pub struct StartArgs {
     /// 实际开始时间 YYYY-MM-DD HH:MM:SS（缺省用服务端当前时间）
     #[arg(long)]
     pub real_started: Option<String>,
+    /// 本次消耗工时（小时，缺省 0）
     #[arg(long)]
     pub consumed: Option<String>,
+    /// 剩余工时（小时）。必须大于 0：为 0 时禅道会把“开始”当作“完成”
     #[arg(long)]
     pub left: Option<String>,
-    /// 完成后转派给（账号）
+    /// 开始后指派给（账号，缺省不变）
     #[arg(long)]
     pub assigned_to: Option<String>,
     #[arg(long)]
@@ -189,13 +192,12 @@ pub struct FinishArgs {
     pub id: String,
 
     /// 本次消耗工时（小时，必须大于 0）
-    #[arg(long)]
-    pub consumed: Option<String>,
-    #[arg(long)]
-    pub left: Option<String>,
+    #[arg(long, required = true)]
+    pub consumed: String,
     /// 完成日期 YYYY-MM-DD（缺省用服务端当前时间）
     #[arg(long)]
     pub finished_date: Option<String>,
+    /// 完成后指派给（账号，缺省不变）
     #[arg(long)]
     pub assigned_to: Option<String>,
     #[arg(long)]
@@ -312,9 +314,9 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
         TaskCommands::Create(a) => {
             for item in [("name", &a.name)] {
                 if item.1.trim().is_empty() {
-                    return fail(&ZentaoError::Query(crate::domain::QueryError::InvalidParameter(
-                        "任务名称不能为空".into(),
-                    )));
+                    return fail(&ZentaoError::Query(
+                        crate::domain::QueryError::InvalidParameter("任务名称不能为空".into()),
+                    ));
                 }
             }
             let draft = TaskDraft {
@@ -343,7 +345,11 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
                     ("assignedTo", draft.assigned_to.as_deref().unwrap_or("")),
                 ],
             );
-            try_write!(a.write, s, gateway.create_task(EntityId::from(a.project.as_str()), draft.clone()))
+            try_write!(
+                a.write,
+                s,
+                gateway.create_task(EntityId::from(a.project.as_str()), draft.clone())
+            )
         }
         TaskCommands::Edit(a) => {
             // 编辑至少要提供一个字段，避免无意义提交。
@@ -362,9 +368,9 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
                 comment: a.comment.clone(),
             };
             if all_none(&edit) {
-                return fail(&ZentaoError::Query(crate::domain::QueryError::InvalidParameter(
-                    "未提供任何要修改的字段".into(),
-                )));
+                return fail(&ZentaoError::Query(
+                    crate::domain::QueryError::InvalidParameter("未提供任何要修改的字段".into()),
+                ));
             }
             let s = summary(
                 &format!("编辑任务 {}", a.id),
@@ -383,8 +389,13 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
                     ("comment", edit.comment.as_deref().unwrap_or("")),
                 ],
             );
-            let s = format!("{s}  备注：将连当前字段基线一并提交（旧版接口行为，空提交会清空字段）");
-            try_write!(a.write, s, gateway.edit_task(EntityId::from(a.id.as_str()), edit.clone()))
+            let s =
+                format!("{s}  备注：将连当前字段基线一并提交（旧版接口行为，空提交会清空字段）");
+            try_write!(
+                a.write,
+                s,
+                gateway.edit_task(EntityId::from(a.id.as_str()), edit.clone())
+            )
         }
         TaskCommands::Assign(a) => {
             let edit = TaskEdit {
@@ -399,86 +410,216 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
                     ("comment", a.comment.as_deref().unwrap_or("")),
                 ],
             );
-            try_write!(a.write, s, gateway.edit_task(EntityId::from(a.id.as_str()), edit.clone()))
+            try_write!(
+                a.write,
+                s,
+                gateway.edit_task(EntityId::from(a.id.as_str()), edit.clone())
+            )
         }
         TaskCommands::Start(a) => {
+            let id = EntityId::from(a.id.as_str());
+            let detail = match gateway.get_task(id.clone()).await {
+                Ok(d) => d,
+                Err(e) => return fail(&e.into()),
+            };
+            let status = detail.status.to_string();
+            if !matches!(detail.status, TaskStatus::Wait | TaskStatus::Paused) {
+                return fail(&ZentaoError::Query(
+                    crate::domain::QueryError::InvalidParameter(format!(
+                        "只能开始 wait/pause 状态的任务（当前状态: {status}）"
+                    )),
+                ));
+            }
+            let left = match a.left.as_deref().filter(|s| !s.trim().is_empty()) {
+                Some(v) => v.trim().to_string(),
+                None => format!("{}", detail.left),
+            };
+            if left.parse::<f64>().map(|v| v == 0.0).unwrap_or(false) {
+                return fail(&ZentaoError::Query(
+                    crate::domain::QueryError::InvalidParameter(
+                        "left（剩余工时）为 0：禅道会把“开始”当作“完成”并指派回创建人。\
+                     请用 --left 指定剩余工时；任务已无剩余时请直接用 task finish"
+                            .into(),
+                    ),
+                ));
+            }
+            let consumed = a
+                .consumed
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .unwrap_or("0")
+                .to_string();
             let p = TaskStartParams {
                 real_started: a.real_started.clone(),
-                consumed: a.consumed.clone(),
-                left: a.left.clone(),
+                consumed: Some(consumed.clone()),
+                left: Some(left.clone()),
                 assigned_to: a.assigned_to.clone(),
                 comment: a.comment.clone(),
             };
             let s = summary(
-                &format!("开始任务 {}", a.id),
+                &format!("开始任务 {}（当前状态: {status}）", a.id),
                 &[
-                    ("realStarted", p.real_started.as_deref().unwrap_or("")),
-                    ("consumed", p.consumed.as_deref().unwrap_or("")),
-                    ("left", p.left.as_deref().unwrap_or("")),
-                    ("assignedTo", p.assigned_to.as_deref().unwrap_or("")),
+                    (
+                        "realStarted",
+                        p.real_started
+                            .as_deref()
+                            .unwrap_or("（缺省：服务端当前时间）"),
+                    ),
+                    ("consumed", consumed.as_str()),
+                    ("left", left.as_str()),
+                    ("assignedTo", p.assigned_to.as_deref().unwrap_or("（不变）")),
                     ("comment", p.comment.as_deref().unwrap_or("")),
                 ],
             );
-            try_write!(a.write, s, gateway.start_task(EntityId::from(a.id.as_str()), p.clone()))
+            try_write!(a.write, s, gateway.start_task(id, p.clone()))
         }
         TaskCommands::Finish(a) => {
+            let id = EntityId::from(a.id.as_str());
+            let detail = match gateway.get_task(id.clone()).await {
+                Ok(d) => d,
+                Err(e) => return fail(&e.into()),
+            };
+            let status = detail.status.to_string();
+            if !matches!(detail.status, TaskStatus::Wait | TaskStatus::Doing) {
+                return fail(&ZentaoError::Query(
+                    crate::domain::QueryError::InvalidParameter(format!(
+                        "只能完成 wait/doing 状态的任务（当前状态: {status}）"
+                    )),
+                ));
+            }
+            let consumed = a.consumed.trim();
+            match consumed.parse::<f64>() {
+                Ok(v) if v > 0.0 => {}
+                _ => {
+                    return fail(&ZentaoError::Query(
+                        crate::domain::QueryError::InvalidParameter(
+                            "本次消耗（--consumed）必须大于 0".into(),
+                        ),
+                    ));
+                }
+            }
             let p = TaskFinishParams {
-                current_consumed: a.consumed.clone(),
-                left: a.left.clone(),
+                current_consumed: Some(consumed.to_string()),
                 finished_date: a.finished_date.clone(),
                 assigned_to: a.assigned_to.clone(),
                 comment: a.comment.clone(),
             };
             let s = summary(
-                &format!("完成任务 {}", a.id),
+                &format!(
+                    "完成任务 {}（当前状态: {status}，此前总计消耗: {}）",
+                    a.id, detail.consumed
+                ),
                 &[
-                    ("currentConsumed", p.current_consumed.as_deref().unwrap_or("")),
-                    ("left", p.left.as_deref().unwrap_or("")),
-                    ("finishedDate", p.finished_date.as_deref().unwrap_or("")),
-                    ("assignedTo", p.assigned_to.as_deref().unwrap_or("")),
+                    ("consumed（基线）", &format!("{}", detail.consumed)),
+                    ("currentConsumed", consumed),
+                    (
+                        "finishedDate",
+                        p.finished_date
+                            .as_deref()
+                            .unwrap_or("（缺省：服务端当前时间）"),
+                    ),
+                    (
+                        "assignedTo",
+                        p.assigned_to
+                            .as_deref()
+                            .unwrap_or(detail.assigned_to.as_str()),
+                    ),
                     ("comment", p.comment.as_deref().unwrap_or("")),
                 ],
             );
-            try_write!(a.write, s, gateway.finish_task(EntityId::from(a.id.as_str()), p.clone()))
+            try_write!(a.write, s, gateway.finish_task(id, p.clone()))
         }
         TaskCommands::Cancel(a) => {
+            let id = EntityId::from(a.id.as_str());
+            let detail = match gateway.get_task(id.clone()).await {
+                Ok(d) => d,
+                Err(e) => return fail(&e.into()),
+            };
+            let status = detail.status.to_string();
+            if !matches!(
+                detail.status,
+                TaskStatus::Wait | TaskStatus::Doing | TaskStatus::Paused
+            ) {
+                return fail(&ZentaoError::Query(
+                    crate::domain::QueryError::InvalidParameter(format!(
+                        "不能取消 {status} 状态的任务（仅 wait/doing/pause 可取消）"
+                    )),
+                ));
+            }
             let p = TaskNoteParams {
                 comment: a.comment.clone(),
             };
             let s = summary(
-                &format!("取消任务 {}", a.id),
+                &format!("取消任务 {}（当前状态: {status}）", a.id),
                 &[("comment", p.comment.as_deref().unwrap_or(""))],
             );
-            try_write!(a.write, s, gateway.cancel_task(EntityId::from(a.id.as_str()), p.clone()))
+            try_write!(a.write, s, gateway.cancel_task(id, p.clone()))
         }
         TaskCommands::Close(a) => {
+            let id = EntityId::from(a.id.as_str());
+            let detail = match gateway.get_task(id.clone()).await {
+                Ok(d) => d,
+                Err(e) => return fail(&e.into()),
+            };
+            let status = detail.status.to_string();
+            if detail.status != TaskStatus::Done {
+                return fail(&ZentaoError::Query(
+                    crate::domain::QueryError::InvalidParameter(format!(
+                        "只能关闭 done 状态的任务（当前状态: {status}）"
+                    )),
+                ));
+            }
             let p = TaskNoteParams {
                 comment: a.comment.clone(),
             };
             let s = summary(
-                &format!("关闭任务 {}", a.id),
+                &format!("关闭任务 {}（当前状态: {status}）", a.id),
                 &[("comment", p.comment.as_deref().unwrap_or(""))],
             );
-            try_write!(a.write, s, gateway.close_task(EntityId::from(a.id.as_str()), p.clone()))
+            try_write!(a.write, s, gateway.close_task(id, p.clone()))
         }
         TaskCommands::Activate(a) => {
+            let id = EntityId::from(a.id.as_str());
+            let detail = match gateway.get_task(id.clone()).await {
+                Ok(d) => d,
+                Err(e) => return fail(&e.into()),
+            };
+            let status = detail.status.to_string();
+            if !matches!(
+                detail.status,
+                TaskStatus::Done | TaskStatus::Cancel | TaskStatus::Closed
+            ) {
+                return fail(&ZentaoError::Query(
+                    crate::domain::QueryError::InvalidParameter(format!(
+                        "只能激活 done/cancel/closed 状态的任务（当前状态: {status}）"
+                    )),
+                ));
+            }
             let p = TaskNoteParams {
                 comment: a.comment.clone(),
             };
             let s = summary(
-                &format!("激活任务 {}", a.id),
+                &format!("激活任务 {}（当前状态: {status}）", a.id),
                 &[("comment", p.comment.as_deref().unwrap_or(""))],
             );
-            try_write!(a.write, s, gateway.activate_task(EntityId::from(a.id.as_str()), p.clone()))
+            try_write!(a.write, s, gateway.activate_task(id, p.clone()))
         }
         TaskCommands::Comment(a) => {
             if a.comment.trim().is_empty() {
-                return fail(&ZentaoError::Query(crate::domain::QueryError::InvalidParameter(
-                    "评论内容不能为空".into(),
-                )));
+                return fail(&ZentaoError::Query(
+                    crate::domain::QueryError::InvalidParameter("评论内容不能为空".into()),
+                ));
             }
-            let s = summary(&format!("评论任务 {}", a.id), &[("comment", a.comment.as_str())]);
-            try_write!(a.write, s, gateway.comment_task(EntityId::from(a.id.as_str()), &a.comment))
+            let s = summary(
+                &format!("评论任务 {}", a.id),
+                &[("comment", a.comment.as_str())],
+            );
+            try_write!(
+                a.write,
+                s,
+                gateway.comment_task(EntityId::from(a.id.as_str()), &a.comment)
+            )
         }
     }
 }

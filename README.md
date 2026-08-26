@@ -49,8 +49,8 @@ zentao-cli bug get <id>
 zentao-cli task create <project-id> --name <名称> [--pri 1-4] [--assigned-to <账号>] [--deadline YYYY-MM-DD] ...
 zentao-cli task edit <id> [--name ...] [--desc ...] [--assigned-to ...] [--status wait|doing|done|pause|cancel|closed] [--deadline ...] [--comment ...]
 zentao-cli task assign <id> <账号> [--comment ...]
-zentao-cli task start <id> [--consumed <小时>] [--left <小时>] [--comment ...]
-zentao-cli task finish <id> --consumed <本次耗时> [--left ...] [--comment ...]
+zentao-cli task start <id> [--left <剩余工时>] [--consumed <小时>] [--real-started YYYY-MM-DD HH:MM:SS] [--comment ...]
+zentao-cli task finish <id> --consumed <本次耗时> [--finished-date YYYY-MM-DD] [--assigned-to ...] [--comment ...]
 zentao-cli task cancel <id> [--comment ...]
 zentao-cli task close <id> [--comment ...]
 zentao-cli task activate <id> [--comment ...]
@@ -81,6 +81,9 @@ zentao-cli bug comment <id> --comment <内容>
 - `--dry-run`：只显示将提交的字段，不发出请求。
 - 无终端且未给 `--yes`/`--dry-run`：拒绝执行。
 - `--dry-run`/摘要里显示的字段是**将提交的表单内容**；编辑类命令会连同当前字段基线一并提交（旧版接口未提交的字段会被服务端清空，这是实例行为，非 CLI 缺陷）。
+- 状态流转命令（start/finish/cancel/close/activate）会先回读任务当前状态做前置校验，状态不符直接拒绝、不发出写请求。
+- **`task start` 特别防护**：禅道把「开始且剩余工时为 0」当作「完成」并指派回创建人。CLI 强制 `left > 0`（`--left` 给值或沿用任务当前剩余），否则拒绝执行；任务已无剩余请直接用 `task finish`。
+- `task finish` 的 `--consumed` 必填且必须大于 0；CLI 自动带上任务之前的总计消耗作基线，避免服务端误报“总计消耗必须大于之前消耗”。
 
 过滤能力说明（以旧版接口实际能力为准）：
 

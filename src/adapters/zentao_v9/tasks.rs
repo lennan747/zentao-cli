@@ -27,10 +27,7 @@ pub(super) fn field(k: &str, v: impl Into<String>) -> (String, String) {
 
 /// 从对象 JSON 复制表单字段（json_key -> form_name）。缺失字段跳过；
 /// `0000-00-00` 归零日期视为空串（与页面表单行为一致）。
-pub(super) fn form_from_json(
-    json: &Value,
-    fields: &[(&str, &str)],
-) -> Vec<(String, String)> {
+pub(super) fn form_from_json(json: &Value, fields: &[(&str, &str)]) -> Vec<(String, String)> {
     fields
         .iter()
         .filter_map(|(json_key, form_name)| {
@@ -291,11 +288,37 @@ impl TaskGateway for ZentaoV9TaskGateway {
     }
 
     async fn start_task(&self, id: EntityId, params: TaskStartParams) -> Result<(), QueryError> {
-        let mut form = vec![field("status", "doing")];
+        // 回读基线 + 前置校验：禅道“开始”表单里 left（剩余工时）为空/0 时，
+        // 服务端会把任务直接标记为完成并指派回创建人（2026-08-26 真实事故）。
+        let raw = self.raw_task(&id).await?;
+        let current = str_field(&raw, "status");
+        if current != "wait" && current != "pause" {
+            return Err(QueryError::InvalidParameter(format!(
+                "只能开始 wait/pause 状态的任务（当前状态: {current}）"
+            )));
+        }
+
+        let left = match params.left.as_deref().filter(|s| !s.trim().is_empty()) {
+            Some(v) => v.trim().to_string(),
+            None => str_field(&raw, "left"),
+        };
+        if left.parse::<f64>().map(|v| v == 0.0).unwrap_or(false) {
+            return Err(QueryError::InvalidParameter(
+                "left（剩余工时）为 0：禅道会把“开始”当作“完成”并指派回创建人。\
+                 请用 --left 指定剩余工时；任务已无剩余时请直接用 task finish"
+                    .into(),
+            ));
+        }
+
+        // realStarted 缺省交给服务端填当前时间（本地时钟不确定时区，不自行生成）。
+        let mut form = vec![field("status", "doing"), field("left", left)];
         form.extend(optional_fields(vec![
             ("realStarted", params.real_started),
-            ("consumed", params.consumed),
-            ("left", params.left),
+            (
+                "consumed",
+                Some(params.consumed.unwrap_or_else(|| "0".to_string()))
+                    .filter(|s| !s.trim().is_empty()),
+            ),
             ("assignedTo", params.assigned_to),
             ("comment", params.comment),
         ]));
@@ -304,10 +327,38 @@ impl TaskGateway for ZentaoV9TaskGateway {
     }
 
     async fn finish_task(&self, id: EntityId, params: TaskFinishParams) -> Result<(), QueryError> {
-        let mut form = vec![field("status", "done")];
+        // 回读基线 + 前置校验：finish 表单的隐藏 `consumed` 是“之前的总计消耗”，
+        // 缺失时服务端按 0 参与校验，导致“总计消耗必须大于之前消耗”误报。
+        let raw = self.raw_task(&id).await?;
+        let current = str_field(&raw, "status");
+        if current != "wait" && current != "doing" {
+            return Err(QueryError::InvalidParameter(format!(
+                "只能完成 wait/doing 状态的任务（当前状态: {current}）"
+            )));
+        }
+
+        let current_consumed = params
+            .current_consumed
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or("");
+        match current_consumed.parse::<f64>() {
+            Ok(v) if v > 0.0 => {}
+            _ => {
+                return Err(QueryError::InvalidParameter(
+                    "本次消耗（--consumed）必须大于 0".into(),
+                ));
+            }
+        }
+
+        // finishedDate 缺省交给服务端填当前时间。
+        let mut form = vec![
+            field("status", "done"),
+            field("consumed", str_field(&raw, "consumed")),
+            field("currentConsumed", current_consumed),
+        ];
         form.extend(optional_fields(vec![
-            ("currentConsumed", params.current_consumed),
-            ("left", params.left),
             ("finishedDate", params.finished_date),
             ("assignedTo", params.assigned_to),
             ("comment", params.comment),
@@ -317,6 +368,13 @@ impl TaskGateway for ZentaoV9TaskGateway {
     }
 
     async fn cancel_task(&self, id: EntityId, params: TaskNoteParams) -> Result<(), QueryError> {
+        let raw = self.raw_task(&id).await?;
+        let current = str_field(&raw, "status");
+        if !matches!(current.as_str(), "wait" | "doing" | "pause") {
+            return Err(QueryError::InvalidParameter(format!(
+                "不能取消 {current} 状态的任务（仅 wait/doing/pause 可取消）"
+            )));
+        }
         let mut form = vec![field("status", "cancel")];
         form.extend(optional_fields(vec![("comment", params.comment)]));
         let url = Routes::task_cancel(self.client.server(), &id.0);
@@ -324,6 +382,13 @@ impl TaskGateway for ZentaoV9TaskGateway {
     }
 
     async fn close_task(&self, id: EntityId, params: TaskNoteParams) -> Result<(), QueryError> {
+        let raw = self.raw_task(&id).await?;
+        let current = str_field(&raw, "status");
+        if current != "done" {
+            return Err(QueryError::InvalidParameter(format!(
+                "只能关闭 done 状态的任务（当前状态: {current}）"
+            )));
+        }
         let mut form = vec![field("status", "closed")];
         form.extend(optional_fields(vec![("comment", params.comment)]));
         let url = Routes::task_close(self.client.server(), &id.0);
@@ -331,6 +396,13 @@ impl TaskGateway for ZentaoV9TaskGateway {
     }
 
     async fn activate_task(&self, id: EntityId, params: TaskNoteParams) -> Result<(), QueryError> {
+        let raw = self.raw_task(&id).await?;
+        let current = str_field(&raw, "status");
+        if !matches!(current.as_str(), "done" | "cancel" | "closed") {
+            return Err(QueryError::InvalidParameter(format!(
+                "只能激活 done/cancel/closed 状态的任务（当前状态: {current}）"
+            )));
+        }
         let mut form = vec![field("status", "wait")];
         form.extend(optional_fields(vec![("comment", params.comment)]));
         let url = Routes::task_activate(self.client.server(), &id.0);

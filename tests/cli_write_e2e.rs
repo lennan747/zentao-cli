@@ -26,6 +26,14 @@ fn seed_session(home: &TempDir, server_uri: &str) {
     std::fs::write(path, content).unwrap();
 }
 
+fn fixture(name: &str) -> String {
+    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests/fixtures");
+    path.push(name);
+    std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("read fixture {}: {}", path.display(), e))
+}
+
 /// 挂载评论 POST mock；若 CLI 意外发请求会得到 404，从而让断言失败。
 async fn mount_comment_mock(server: &MockServer, task_id: &str) {
     Mock::given(method("POST"))
@@ -117,6 +125,11 @@ async fn empty_comment_is_rejected_before_network() {
 #[tokio::test]
 async fn denied_permission_reports_forbidden_exit_code() {
     let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/task-view-946.json"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(fixture("task-detail-done.json")))
+        .mount(&server)
+        .await;
     Mock::given(method("POST"))
         .and(path("/task-close-946.json"))
         .respond_with(ResponseTemplate::new(200).set_body_string(
@@ -133,4 +146,64 @@ async fn denied_permission_reports_forbidden_exit_code() {
         .assert()
         .code(4)
         .stderr(predicates::str::contains("无权限"));
+}
+
+#[tokio::test]
+async fn start_refuses_zero_left_before_network() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/task-view-946.json"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(fixture("task-detail.json")))
+        .mount(&server)
+        .await;
+
+    let home = TempDir::new().unwrap();
+    seed_session(&home, &server.uri());
+
+    zentao(&home)
+        .args(["task", "start", "946", "--yes"])
+        .assert()
+        .code(6)
+        .stderr(predicates::str::contains("left（剩余工时）为 0"));
+}
+
+#[tokio::test]
+async fn finish_requires_consumed_flag() {
+    let server = MockServer::start().await;
+    let home = TempDir::new().unwrap();
+    seed_session(&home, &server.uri());
+
+    zentao(&home)
+        .args(["task", "finish", "946", "--yes"])
+        .assert()
+        .code(2)
+        .stderr(predicates::str::contains("consumed"));
+}
+
+#[tokio::test]
+async fn finish_posts_consumed_baseline_and_current() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/task-view-978.json"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(fixture("task-detail.json")))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/task-finish-978.json"))
+        .and(body_string_contains("currentConsumed=2"))
+        .and(body_string_contains("consumed=0"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(
+            r#"{"status":"success","data":"{\"locate\":\"https://x/task-view-978.json\"}"}"#,
+        ))
+        .mount(&server)
+        .await;
+
+    let home = TempDir::new().unwrap();
+    seed_session(&home, &server.uri());
+
+    zentao(&home)
+        .args(["task", "finish", "978", "--consumed", "2", "--yes"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("已提交成功"));
 }

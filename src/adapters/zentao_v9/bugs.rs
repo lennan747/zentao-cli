@@ -11,7 +11,9 @@ use super::client::ZentaoV9Client;
 use super::normalize::{enum_field, num_field, opt_date, str_field};
 use super::response::{parse_alert_response, parse_body};
 use super::routes::Routes;
-use super::tasks::{field, form_from_json, optional_fields, override_fields, pager_info, split_accounts};
+use super::tasks::{
+    field, form_from_json, optional_fields, override_fields, pager_info, split_accounts,
+};
 
 /// Bug 查询网关（禅道 V9 旧版 `.json` 接口）。
 ///
@@ -269,7 +271,11 @@ impl BugGateway for ZentaoV9BugGateway {
         self.post_write(&url, form).await
     }
 
-    async fn activate_bug(&self, id: EntityId, params: BugActivateParams) -> Result<(), QueryError> {
+    async fn activate_bug(
+        &self,
+        id: EntityId,
+        params: BugActivateParams,
+    ) -> Result<(), QueryError> {
         let opened_build = match params.opened_build.as_deref() {
             Some(v) => v.to_string(),
             None => self.current_opened_build(&id).await?.unwrap_or_default(),

@@ -28,10 +28,7 @@ pub enum WriteControl {
 /// 2. `--yes`：打印摘要后直接执行；
 /// 3. 交互终端：打印摘要并询问 y/N；
 /// 4. 无终端且没有 `--yes`/`--dry-run`：拒绝执行。
-pub fn confirm_write(
-    summary: &str,
-    flags: WriteFlags,
-) -> Result<WriteControl, ZentaoError> {
+pub fn confirm_write(summary: &str, flags: WriteFlags) -> Result<WriteControl, ZentaoError> {
     println!("{summary}");
 
     if flags.dry_run {

@@ -146,7 +146,6 @@ pub struct TaskStartParams {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct TaskFinishParams {
     pub current_consumed: Option<String>,
-    pub left: Option<String>,
     pub finished_date: Option<String>,
     pub assigned_to: Option<String>,
     pub comment: Option<String>,

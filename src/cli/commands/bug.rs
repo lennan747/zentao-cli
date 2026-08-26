@@ -319,9 +319,9 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
         },
         BugCommands::Create(a) => {
             if a.title.trim().is_empty() {
-                return fail(&ZentaoError::Query(crate::domain::QueryError::InvalidParameter(
-                    "Bug 标题不能为空".into(),
-                )));
+                return fail(&ZentaoError::Query(
+                    crate::domain::QueryError::InvalidParameter("Bug 标题不能为空".into()),
+                ));
             }
             let draft = BugDraft {
                 title: a.title.clone(),
@@ -357,7 +357,11 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
                     ("openedBuild", draft.opened_build.as_deref().unwrap_or("")),
                 ],
             );
-            try_write!(a.write, s, gateway.create_bug(EntityId::from(a.product.as_str()), draft.clone()))
+            try_write!(
+                a.write,
+                s,
+                gateway.create_bug(EntityId::from(a.product.as_str()), draft.clone())
+            )
         }
         BugCommands::Edit(a) => {
             let edit = BugEdit {
@@ -378,9 +382,9 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
                 comment: a.comment.clone(),
             };
             if all_none(&edit) {
-                return fail(&ZentaoError::Query(crate::domain::QueryError::InvalidParameter(
-                    "未提供任何要修改的字段".into(),
-                )));
+                return fail(&ZentaoError::Query(
+                    crate::domain::QueryError::InvalidParameter("未提供任何要修改的字段".into()),
+                ));
             }
             let s = summary(
                 &format!("编辑 Bug {}", a.id),
@@ -392,7 +396,10 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
                     ("assignedTo", edit.assigned_to.as_deref().unwrap_or("")),
                     ("status", edit.status.as_deref().unwrap_or("")),
                     ("resolution", edit.resolution.as_deref().unwrap_or("")),
-                    ("resolvedBuild", edit.resolved_build.as_deref().unwrap_or("")),
+                    (
+                        "resolvedBuild",
+                        edit.resolved_build.as_deref().unwrap_or(""),
+                    ),
                     ("openedBuild", edit.opened_build.as_deref().unwrap_or("")),
                     ("deadline", edit.deadline.as_deref().unwrap_or("")),
                     ("keywords", edit.keywords.as_deref().unwrap_or("")),
@@ -402,8 +409,13 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
                     ("comment", edit.comment.as_deref().unwrap_or("")),
                 ],
             );
-            let s = format!("{s}  备注：将连当前字段基线一并提交（旧版接口行为，空提交会清空字段）");
-            try_write!(a.write, s, gateway.edit_bug(EntityId::from(a.id.as_str()), edit.clone()))
+            let s =
+                format!("{s}  备注：将连当前字段基线一并提交（旧版接口行为，空提交会清空字段）");
+            try_write!(
+                a.write,
+                s,
+                gateway.edit_bug(EntityId::from(a.id.as_str()), edit.clone())
+            )
         }
         BugCommands::Assign(a) => {
             let edit = BugEdit {
@@ -418,7 +430,11 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
                     ("comment", a.comment.as_deref().unwrap_or("")),
                 ],
             );
-            try_write!(a.write, s, gateway.edit_bug(EntityId::from(a.id.as_str()), edit.clone()))
+            try_write!(
+                a.write,
+                s,
+                gateway.edit_bug(EntityId::from(a.id.as_str()), edit.clone())
+            )
         }
         BugCommands::Resolve(a) => {
             let p = BugResolveParams {
@@ -438,7 +454,11 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
                     ("comment", p.comment.as_deref().unwrap_or("")),
                 ],
             );
-            try_write!(a.write, s, gateway.resolve_bug(EntityId::from(a.id.as_str()), p.clone()))
+            try_write!(
+                a.write,
+                s,
+                gateway.resolve_bug(EntityId::from(a.id.as_str()), p.clone())
+            )
         }
         BugCommands::Activate(a) => {
             let p = BugActivateParams {
@@ -454,7 +474,11 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
                     ("comment", p.comment.as_deref().unwrap_or("")),
                 ],
             );
-            try_write!(a.write, s, gateway.activate_bug(EntityId::from(a.id.as_str()), p.clone()))
+            try_write!(
+                a.write,
+                s,
+                gateway.activate_bug(EntityId::from(a.id.as_str()), p.clone())
+            )
         }
         BugCommands::Close(a) => {
             let p = BugNoteParams {
@@ -464,7 +488,11 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
                 &format!("关闭 Bug {}", a.id),
                 &[("comment", p.comment.as_deref().unwrap_or(""))],
             );
-            try_write!(a.write, s, gateway.close_bug(EntityId::from(a.id.as_str()), p.clone()))
+            try_write!(
+                a.write,
+                s,
+                gateway.close_bug(EntityId::from(a.id.as_str()), p.clone())
+            )
         }
         BugCommands::Confirm(a) => {
             let p = BugNoteParams {
@@ -474,16 +502,27 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
                 &format!("确认 Bug {}", a.id),
                 &[("comment", p.comment.as_deref().unwrap_or(""))],
             );
-            try_write!(a.write, s, gateway.confirm_bug(EntityId::from(a.id.as_str()), p.clone()))
+            try_write!(
+                a.write,
+                s,
+                gateway.confirm_bug(EntityId::from(a.id.as_str()), p.clone())
+            )
         }
         BugCommands::Comment(a) => {
             if a.comment.trim().is_empty() {
-                return fail(&ZentaoError::Query(crate::domain::QueryError::InvalidParameter(
-                    "评论内容不能为空".into(),
-                )));
+                return fail(&ZentaoError::Query(
+                    crate::domain::QueryError::InvalidParameter("评论内容不能为空".into()),
+                ));
             }
-            let s = summary(&format!("评论 Bug {}", a.id), &[("comment", a.comment.as_str())]);
-            try_write!(a.write, s, gateway.comment_bug(EntityId::from(a.id.as_str()), &a.comment))
+            let s = summary(
+                &format!("评论 Bug {}", a.id),
+                &[("comment", a.comment.as_str())],
+            );
+            try_write!(
+                a.write,
+                s,
+                gateway.comment_bug(EntityId::from(a.id.as_str()), &a.comment)
+            )
         }
     }
 }

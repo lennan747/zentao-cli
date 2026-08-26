@@ -16,7 +16,7 @@ use zentao_cli::adapters::zentao_v9::{ZentaoV9BugGateway, ZentaoV9Client, Zentao
 use zentao_cli::application::{BugGateway, TaskGateway};
 use zentao_cli::domain::{
     BugDraft, BugEdit, BugResolveParams, EntityId, QueryError, TaskDraft, TaskEdit,
-    TaskFinishParams, TaskNoteParams,
+    TaskFinishParams, TaskNoteParams, TaskStartParams,
 };
 
 const RELOAD_BODY: &str = "<html><meta charset='utf-8'/><style>body{background:white}</style><script>if(parent !== window) parent.location.reload(true);\n</script>";
@@ -48,7 +48,9 @@ async fn task_edit_posts_full_baseline_with_overrides() {
     Mock::given(method("POST"))
         .and(path("/task-edit-946.json"))
         .and(body_string_contains("deadline=2026-09-01"))
-        .and(body_string_contains("comment=%E8%B0%83%E6%95%B4%E6%8E%92%E6%9C%9F"))
+        .and(body_string_contains(
+            "comment=%E8%B0%83%E6%95%B4%E6%8E%92%E6%9C%9F",
+        ))
         // 基线字段必须一并提交，否则旧版服务端会清空未提交字段
         .and(body_string_contains("consumed=0"))
         .and(body_string_contains("mailto%5B%5D=user1"))
@@ -78,9 +80,10 @@ async fn task_edit_with_team_posts_team_baseline() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/task-view-946.json"))
-        .respond_with(ResponseTemplate::new(200).set_body_string(
-            fixture_content("task-detail-with-team.json"),
-        ))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(fixture_content("task-detail-with-team.json")),
+        )
         .expect(1)
         .mount(&server)
         .await;
@@ -138,13 +141,11 @@ async fn task_edit_with_explicit_status_posts_status() {
 }
 
 #[tokio::test]
-async fn task_finish_validation_failure_is_rejected() {
+async fn task_finish_rejects_zero_current_consumed() {
     let server = MockServer::start().await;
-    Mock::given(method("POST"))
-        .and(path("/task-finish-978.json"))
-        .respond_with(ResponseTemplate::new(200).set_body_string(
-            wrap(r#"{"result":"fail","message":["\"本次消耗\"不能为0"]}"#),
-        ))
+    Mock::given(method("GET"))
+        .and(path("/task-view-978.json"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(task_detail_fixture()))
         .mount(&server)
         .await;
 
@@ -160,19 +161,209 @@ async fn task_finish_validation_failure_is_rejected() {
         .await
         .expect_err("finish should be rejected");
     match err {
+        QueryError::InvalidParameter(msg) => assert!(msg.contains("必须大于 0"), "msg: {msg}"),
+        other => panic!("expected InvalidParameter, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn task_finish_posts_consumed_baseline_and_current() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/task-view-978.json"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(task_detail_fixture()))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/task-finish-978.json"))
+        .and(body_string_contains("currentConsumed=2"))
+        .and(body_string_contains("consumed=0"))
+        .and(body_string_contains("status=done"))
+        .and(NotContains("finishedDate=".into()))
+        .respond_with(ResponseTemplate::new(200).set_body_string(locate("/task-view-978.json")))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let gateway = ZentaoV9TaskGateway::new(client(&server).await);
+    gateway
+        .finish_task(
+            EntityId::from("978"),
+            TaskFinishParams {
+                current_consumed: Some("2".into()),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("finish should succeed");
+}
+
+#[tokio::test]
+async fn task_finish_server_rejection_is_reported() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/task-view-978.json"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(task_detail_fixture()))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/task-finish-978.json"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(wrap(
+            r#"{"result":"fail","message":["\"本次消耗\"不能为0"]}"#,
+        )))
+        .mount(&server)
+        .await;
+
+    let gateway = ZentaoV9TaskGateway::new(client(&server).await);
+    let err = gateway
+        .finish_task(
+            EntityId::from("978"),
+            TaskFinishParams {
+                current_consumed: Some("2".into()),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect_err("finish should be rejected");
+    match err {
         QueryError::Rejected(msg) => assert!(msg.contains("本次消耗")),
         other => panic!("expected Rejected, got {other:?}"),
     }
 }
 
 #[tokio::test]
+async fn task_start_rejects_zero_left() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/task-view-946.json"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(task_detail_fixture()))
+        .mount(&server)
+        .await;
+
+    let gateway = ZentaoV9TaskGateway::new(client(&server).await);
+    let err = gateway
+        .start_task(EntityId::from("946"), TaskStartParams::default())
+        .await
+        .expect_err("start should be rejected");
+    match err {
+        QueryError::InvalidParameter(msg) => {
+            assert!(msg.contains("left（剩余工时）为 0"), "msg: {msg}")
+        }
+        other => panic!("expected InvalidParameter, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn task_start_posts_left_consumed_and_status() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/task-view-946.json"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(task_detail_fixture()))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/task-start-946.json"))
+        .and(body_string_contains("status=doing"))
+        .and(body_string_contains("left=3"))
+        .and(body_string_contains("consumed=0"))
+        .and(NotContains("realStarted=".into()))
+        .respond_with(ResponseTemplate::new(200).set_body_string(locate("/task-view-946.json")))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let gateway = ZentaoV9TaskGateway::new(client(&server).await);
+    gateway
+        .start_task(
+            EntityId::from("946"),
+            TaskStartParams {
+                left: Some("3".into()),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("start should succeed");
+}
+
+#[tokio::test]
+async fn task_start_rejects_done_status() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/task-view-978.json"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(task_detail_done_fixture()))
+        .mount(&server)
+        .await;
+
+    let gateway = ZentaoV9TaskGateway::new(client(&server).await);
+    let err = gateway
+        .start_task(
+            EntityId::from("978"),
+            TaskStartParams {
+                left: Some("3".into()),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect_err("start should be rejected");
+    match err {
+        QueryError::InvalidParameter(msg) => assert!(msg.contains("只能开始"), "msg: {msg}"),
+        other => panic!("expected InvalidParameter, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn task_cancel_rejects_done_status() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/task-view-978.json"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(task_detail_done_fixture()))
+        .mount(&server)
+        .await;
+
+    let gateway = ZentaoV9TaskGateway::new(client(&server).await);
+    let err = gateway
+        .cancel_task(EntityId::from("978"), TaskNoteParams::default())
+        .await
+        .expect_err("cancel should be rejected");
+    match err {
+        QueryError::InvalidParameter(msg) => assert!(msg.contains("不能取消"), "msg: {msg}"),
+        other => panic!("expected InvalidParameter, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn task_activate_rejects_active_status() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/task-view-946.json"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(task_detail_fixture()))
+        .mount(&server)
+        .await;
+
+    let gateway = ZentaoV9TaskGateway::new(client(&server).await);
+    let err = gateway
+        .activate_task(EntityId::from("946"), TaskNoteParams::default())
+        .await
+        .expect_err("activate should be rejected");
+    match err {
+        QueryError::InvalidParameter(msg) => assert!(msg.contains("只能激活"), "msg: {msg}"),
+        other => panic!("expected InvalidParameter, got {other:?}"),
+    }
+}
+
+#[tokio::test]
 async fn task_close_without_permission_is_forbidden() {
     let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/task-view-946.json"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(task_detail_done_fixture()))
+        .mount(&server)
+        .await;
     Mock::given(method("POST"))
         .and(path("/task-close-946.json"))
-        .respond_with(ResponseTemplate::new(200).set_body_string(locate(
-            "/user-deny-task-close.json",
-        )))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_string(locate("/user-deny-task-close.json")),
+        )
         .mount(&server)
         .await;
 
@@ -405,6 +596,10 @@ fn bug_detail_fixture() -> String {
 
 fn task_detail_fixture() -> String {
     fixture_content("task-detail.json")
+}
+
+fn task_detail_done_fixture() -> String {
+    fixture_content("task-detail-done.json")
 }
 
 fn fixture_content(name: &str) -> String {
