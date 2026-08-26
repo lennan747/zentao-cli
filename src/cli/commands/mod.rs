@@ -42,9 +42,9 @@ pub enum Commands {
     Logout(logout::LogoutArgs),
     /// 项目查询
     Project(project::ProjectArgs),
-    /// 任务查询
+    /// 任务查询与写操作
     Task(task::TaskArgs),
-    /// Bug 查询
+    /// Bug 查询与写操作
     Bug(bug::BugArgs),
 }
 

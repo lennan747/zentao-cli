@@ -99,3 +99,61 @@ pub struct TaskDetail {
     #[serde(default)]
     pub left: f64,
 }
+
+/// 新建任务草稿。
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TaskDraft {
+    pub name: String,
+    pub desc: Option<String>,
+    pub module: Option<String>,
+    pub task_type: Option<String>,
+    pub pri: Option<String>,
+    pub estimate: Option<String>,
+    pub est_started: Option<String>,
+    pub deadline: Option<String>,
+    pub assigned_to: Option<String>,
+    pub mailto: Vec<String>,
+}
+
+/// 编辑任务变更集；仅提交用户指定的字段。
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TaskEdit {
+    pub name: Option<String>,
+    pub desc: Option<String>,
+    pub assigned_to: Option<String>,
+    pub pri: Option<String>,
+    pub task_type: Option<String>,
+    pub status: Option<String>,
+    pub estimate: Option<String>,
+    pub consumed: Option<String>,
+    pub left: Option<String>,
+    pub deadline: Option<String>,
+    pub est_started: Option<String>,
+    pub comment: Option<String>,
+}
+
+/// 开始任务参数。
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TaskStartParams {
+    pub real_started: Option<String>,
+    pub consumed: Option<String>,
+    pub left: Option<String>,
+    pub assigned_to: Option<String>,
+    pub comment: Option<String>,
+}
+
+/// 完成任务参数。
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TaskFinishParams {
+    pub current_consumed: Option<String>,
+    pub left: Option<String>,
+    pub finished_date: Option<String>,
+    pub assigned_to: Option<String>,
+    pub comment: Option<String>,
+}
+
+/// 取消/关闭/激活任务的共用参数（仅备注）。
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TaskNoteParams {
+    pub comment: Option<String>,
+}

@@ -73,6 +73,19 @@ impl ZentaoV9Client {
         self.send(request).await
     }
 
+    /// 发送表单 POST 并返回响应文本。
+    pub async fn post_form_text(
+        &self,
+        url: &str,
+        form: &[(&str, &str)],
+    ) -> Result<String, QueryError> {
+        let response = self.post_form(url, form).await?;
+        response
+            .text()
+            .await
+            .map_err(|e| QueryError::Remote(format!("读取响应失败: {e}")))
+    }
+
     async fn send(&self, request: reqwest::RequestBuilder) -> Result<Response, QueryError> {
         let request = if let Some(value) = self.session_cookie() {
             request.header(COOKIE, format!("{SESSION_COOKIE}={value}"))

@@ -26,6 +26,8 @@ pub enum QueryError {
     SessionExpired,
     #[error("请求参数无效: {0}")]
     InvalidParameter(String),
+    #[error("远端校验未通过: {0}")]
+    Rejected(String),
     #[error("远端响应无法解析: {0}")]
     ParseError(String),
     #[error("远端返回不兼容结构")]

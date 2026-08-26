@@ -1,4 +1,5 @@
 pub mod commands;
+pub mod confirm;
 pub mod output;
 
 use std::process::ExitCode;
@@ -37,7 +38,11 @@ pub fn exit_code_from_error(err: &crate::domain::ZentaoError) -> ExitCode {
             crate::domain::QueryError::NotFound => 4,
             crate::domain::QueryError::Forbidden => 4,
             crate::domain::QueryError::SessionExpired => 3,
-            _ => 6,
+            crate::domain::QueryError::InvalidParameter(_) => 6,
+            crate::domain::QueryError::Rejected(_) => 6,
+            crate::domain::QueryError::ParseError(_) => 6,
+            crate::domain::QueryError::IncompatibleResponse => 6,
+            crate::domain::QueryError::Remote(_) => 6,
         },
         ZentaoError::Internal(_) => 7,
     };

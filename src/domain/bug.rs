@@ -88,3 +88,66 @@ pub struct BugDetail {
     #[serde(default)]
     pub steps: String,
 }
+
+/// 新建 Bug 草稿。
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct BugDraft {
+    pub title: String,
+    pub steps: Option<String>,
+    pub module: Option<String>,
+    pub project: Option<String>,
+    pub severity: Option<String>,
+    pub pri: Option<String>,
+    pub assigned_to: Option<String>,
+    pub opened_build: Option<String>,
+    pub deadline: Option<String>,
+    pub keywords: Option<String>,
+    pub bug_type: Option<String>,
+    pub os: Option<String>,
+    pub browser: Option<String>,
+    pub mailto: Vec<String>,
+}
+
+/// 编辑 Bug 变更集；仅提交用户指定的字段。
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct BugEdit {
+    pub title: Option<String>,
+    pub steps: Option<String>,
+    pub severity: Option<String>,
+    pub pri: Option<String>,
+    pub assigned_to: Option<String>,
+    pub status: Option<String>,
+    pub resolution: Option<String>,
+    pub resolved_build: Option<String>,
+    pub opened_build: Option<String>,
+    pub deadline: Option<String>,
+    pub keywords: Option<String>,
+    pub bug_type: Option<String>,
+    pub os: Option<String>,
+    pub browser: Option<String>,
+    pub comment: Option<String>,
+}
+
+/// 解决 Bug 参数。
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct BugResolveParams {
+    pub resolution: Option<String>,
+    pub resolved_build: Option<String>,
+    pub build_name: Option<String>,
+    pub assigned_to: Option<String>,
+    pub comment: Option<String>,
+}
+
+/// 激活 Bug 参数。
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct BugActivateParams {
+    pub assigned_to: Option<String>,
+    pub opened_build: Option<String>,
+    pub comment: Option<String>,
+}
+
+/// 关闭/确认 Bug 的共用参数（仅备注）。
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct BugNoteParams {
+    pub comment: Option<String>,
+}

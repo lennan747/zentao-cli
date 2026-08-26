@@ -119,30 +119,32 @@ fn merge_data(a: Option<Value>, b: Value) -> Value {
 fn classify_data(data: &Value) -> Result<(), QueryError> {
     if let Some(obj) = data.as_object() {
         if obj.get("result").and_then(|v| v.as_str()) == Some("fail") {
-            let msg = obj
-                .get("message")
-                .and_then(|v| v.as_str())
-                .unwrap_or("对象不存在或无权访问");
+            let msg = message_text(obj);
             if msg.contains("并不存在") || msg.contains("不存在") {
                 return Err(QueryError::NotFound);
             }
-            return Err(QueryError::Forbidden);
+            return Err(QueryError::Rejected(msg));
         }
 
         if let Some(locate) = obj.get("locate").and_then(|v| v.as_str()) {
+            // 无权限：旧版跳转到 user-deny-{module}-{method} 拒绝页。
+            if locate.contains("user-deny") {
+                return Err(QueryError::Forbidden);
+            }
             if locate.contains("login") || locate.contains("user-login") {
                 return Err(QueryError::SessionExpired);
             }
             // locate == "back" 等通常表示错误返回上一页。
             if obj.get("message").is_some() {
-                let msg = obj.get("message").and_then(|v| v.as_str()).unwrap_or("");
+                let msg = message_text(obj);
                 if msg.contains("权限") || msg.contains("无权") {
                     return Err(QueryError::Forbidden);
                 }
             }
         }
 
-        if let Some(msg) = obj.get("message").and_then(|v| v.as_str()) {
+        if obj.get("message").is_some() {
+            let msg = message_text(obj);
             if msg.contains("权限") || msg.contains("无权") {
                 return Err(QueryError::Forbidden);
             }
@@ -150,6 +152,77 @@ fn classify_data(data: &Value) -> Result<(), QueryError> {
     }
 
     Ok(())
+}
+
+/// 提取 message：字符串、数组或对象（字段→消息）统一拼为文本。
+fn message_text(obj: &serde_json::Map<String, Value>) -> String {
+    match obj.get("message") {
+        Some(Value::String(s)) => s.clone(),
+        Some(Value::Array(items)) => join_messages(items.iter()),
+        Some(Value::Object(map)) => join_messages(map.values()),
+        _ => "对象不存在或无权访问".to_string(),
+    }
+}
+
+fn join_messages<'a>(values: impl Iterator<Item = &'a Value>) -> String {
+    values
+        .filter_map(|v| match v {
+            Value::String(s) => Some(decode_message_string(s)),
+            Value::Array(items) => {
+                let parts: Vec<String> = items
+                    .iter()
+                    .filter_map(|x| x.as_str().map(decode_message_string))
+                    .collect();
+                if parts.is_empty() {
+                    None
+                } else {
+                    Some(parts.join("; "))
+                }
+            }
+            other => Some(other.to_string()),
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
+/// message 里的双引号是包络转义遗留，还原成真实文本。
+fn decode_message_string(s: &str) -> String {
+    serde_json::from_str::<String>(&format!("\"{s}\""))
+        .unwrap_or_else(|_| s.to_string())
+}
+
+/// 解析“JS 风格”写响应（评论等接口不返回包络，而是父窗刷新脚本）。
+///
+/// 成功：`<script>if(parent !== window) ...reload...`（无 alert）。
+/// 失败：脚本内先出现 `alert('消息')`。
+pub fn parse_alert_response(body: &str) -> Result<(), QueryError> {
+    let Some(start) = body.find("alert(") else {
+        return Ok(());
+    };
+    let rest = &body[start + "alert(".len()..];
+    let inner = rest
+        .trim_start_matches('\'')
+        .trim_start_matches('"')
+        .to_string();
+    // 找到结束引号（消息内可能出现转义引号，取最后一个 ')'）。
+    let inner = match inner.find("')") {
+        Some(i) => inner[..i].to_string(),
+        None => inner
+            .find("\")")
+            .map(|i| inner[..i].to_string())
+            .unwrap_or(inner),
+    };
+    let msg = inner
+        .replace("\\'", "'")
+        .replace("\\\"", "\"")
+        .replace("\\n", "\n")
+        .trim_end()
+        .trim()
+        .to_string();
+    if msg.is_empty() {
+        return Ok(());
+    }
+    Err(QueryError::Rejected(msg))
 }
 
 #[cfg(test)]
@@ -183,5 +256,44 @@ mod tests {
         let body = r#"{"status":"success","data":"{\"message\":\"您无权访问该项目！\"}"}"#;
         let err = parse_body(body).unwrap_err();
         assert!(matches!(err, QueryError::Forbidden));
+    }
+
+    #[test]
+    fn detects_user_deny_redirect() {
+        let body = r#"{"status":"success","data":"{\"locate\":\"https://x/user-deny-task-close.json\"}"}"#;
+        let err = parse_body(body).unwrap_err();
+        assert!(matches!(err, QueryError::Forbidden));
+    }
+
+    #[test]
+    fn rejects_with_array_validation_messages() {
+        let body = r#"{"status":"success","data":"{\"result\":\"fail\",\"message\":[\"\\\"本次消耗\\\"不能为0\"]}"}"#;
+        let err = parse_body(body).unwrap_err();
+        match err {
+            QueryError::Rejected(msg) => assert!(msg.contains("本次消耗")),
+            other => panic!("expected Rejected, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn write_success_with_locate_passes() {
+        let body = r#"{"status":"success","data":"{\"locate\":\"https://x/task-view-946.json\"}"}"#;
+        assert!(parse_body(body).is_ok());
+    }
+
+    #[test]
+    fn alert_script_without_alert_is_success() {
+        let body = "<html><meta charset='utf-8'/><style>body{background:white}</style><script>if(parent !== window) parent.location.reload(true);\n</script>";
+        assert!(parse_alert_response(body).is_ok());
+    }
+
+    #[test]
+    fn alert_script_with_alert_is_rejected() {
+        let body = "<html><script>alert('\"本次消耗\"不能为0\\n')\n</script>";
+        let err = parse_alert_response(body).unwrap_err();
+        match err {
+            QueryError::Rejected(msg) => assert!(msg.contains("本次消耗")),
+            other => panic!("expected Rejected, got {other:?}"),
+        }
     }
 }

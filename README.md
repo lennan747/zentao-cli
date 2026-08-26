@@ -1,6 +1,6 @@
 # zentao-cli
 
-禅道v9.0.3 命令行客户端。只读查询当前账号可见的项目、任务和 Bug。
+禅道v9.0.3 命令行客户端。查询当前账号可见的项目、任务和 Bug，并支持对任务与 Bug 的写操作（创建、编辑、指派、状态流转、评论，默认交互确认）。
 
 ## 安装
 
@@ -44,6 +44,27 @@ zentao-cli task list [--assigned-to me] [--status <status>]
 zentao-cli task get <id>
 zentao-cli bug list [--assigned-to me] [--status <status>]
 zentao-cli bug get <id>
+
+# 写操作（任务）
+zentao-cli task create <project-id> --name <名称> [--pri 1-4] [--assigned-to <账号>] [--deadline YYYY-MM-DD] ...
+zentao-cli task edit <id> [--name ...] [--desc ...] [--assigned-to ...] [--status wait|doing|done|pause|cancel|closed] [--deadline ...] [--comment ...]
+zentao-cli task assign <id> <账号> [--comment ...]
+zentao-cli task start <id> [--consumed <小时>] [--left <小时>] [--comment ...]
+zentao-cli task finish <id> --consumed <本次耗时> [--left ...] [--comment ...]
+zentao-cli task cancel <id> [--comment ...]
+zentao-cli task close <id> [--comment ...]
+zentao-cli task activate <id> [--comment ...]
+zentao-cli task comment <id> --comment <内容>
+
+# 写操作（Bug）
+zentao-cli bug create <product-id> --title <标题> [--severity 1-4] [--pri 0-4] [--assigned-to ...] ...
+zentao-cli bug edit <id> [--title ...] [--severity ...] [--assigned-to ...] [--status active|resolved|closed] ...
+zentao-cli bug assign <id> <账号> [--comment ...]
+zentao-cli bug resolve <id> [--resolution fixed|bydesign|duplicate|postponed|willnotfix|notrepro|...] [--resolved-build <build>] [--comment ...]
+zentao-cli bug activate <id> [--assigned-to ...] [--comment ...]
+zentao-cli bug close <id> [--comment ...]
+zentao-cli bug confirm <id> [--comment ...]
+zentao-cli bug comment <id> --comment <内容>
 ```
 
 全局选项：
@@ -53,12 +74,21 @@ zentao-cli bug get <id>
 - `-v, --verbose`：输出诊断日志到 stderr。
 - `ZENTAO_CLI_HOME`：覆盖配置目录（测试/脚本用）。
 
+写操作安全护栏：
+
+- 所有写命令默认打印操作摘要并要求交互确认（`[y/N]`）。
+- `--yes`：跳过确认直接执行（脚本场景慎用）。
+- `--dry-run`：只显示将提交的字段，不发出请求。
+- 无终端且未给 `--yes`/`--dry-run`：拒绝执行。
+- `--dry-run`/摘要里显示的字段是**将提交的表单内容**；编辑类命令会连同当前字段基线一并提交（旧版接口未提交的字段会被服务端清空，这是实例行为，非 CLI 缺陷）。
+
 过滤能力说明（以旧版接口实际能力为准）：
 
 - `project list --status`：wait/doing/done/suspended/closed，走服务端 `/project-all-{status}.json`。
 - `task list`：数据来自「我的任务」；`--status` 为本地过滤；`--assigned-to` 仅支持 `me`。
 - `bug list`：数据来自「指派给我」；`--status` 为本地过滤；`--assigned-to` 仅支持 `me`。
 - `project list` 只返回 ID 和名称（旧版接口限制），完整字段用 `project get`。
+- 部分写操作受实例权限控制（如任务 close/activate/assignTo、Bug close/confirm/assignTo 可能被拒绝），CLI 会把服务端拒绝原因原样透出（`user-deny-*`）。
 
 ## 配置与凭据安全
 

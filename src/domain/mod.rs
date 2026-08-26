@@ -4,12 +4,18 @@ pub mod project;
 pub mod task;
 
 #[allow(unused_imports)]
-pub use bug::{BugDetail, BugSeverity, BugStatus, BugSummary};
+pub use bug::{
+    BugActivateParams, BugDetail, BugDraft, BugEdit, BugNoteParams, BugResolveParams, BugSeverity,
+    BugStatus, BugSummary,
+};
 pub use error::{AuthError, QueryError, ZentaoError};
 #[allow(unused_imports)]
 pub use project::{ProjectDetail, ProjectStatus, ProjectSummary};
 #[allow(unused_imports)]
-pub use task::{TaskDetail, TaskPriority, TaskStatus, TaskSummary};
+pub use task::{
+    TaskDetail, TaskDraft, TaskEdit, TaskFinishParams, TaskNoteParams, TaskPriority, TaskStartParams,
+    TaskStatus, TaskSummary,
+};
 
 /// 分页结果。
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]

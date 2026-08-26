@@ -47,6 +47,69 @@ impl Routes {
     pub fn bug_view(server: &str, id: &str) -> String {
         format!("{}/bug-view-{}.json", base(server), id)
     }
+
+    // ---- 写操作路由（表单 POST，`.json` 后缀返回包络）----
+
+    pub fn task_create(server: &str, project: &str) -> String {
+        format!("{}/task-create-{}.json", base(server), project)
+    }
+
+    pub fn task_edit(server: &str, id: &str) -> String {
+        format!("{}/task-edit-{}.json", base(server), id)
+    }
+
+    pub fn task_start(server: &str, id: &str) -> String {
+        format!("{}/task-start-{}.json", base(server), id)
+    }
+
+    pub fn task_finish(server: &str, id: &str) -> String {
+        format!("{}/task-finish-{}.json", base(server), id)
+    }
+
+    pub fn task_cancel(server: &str, id: &str) -> String {
+        format!("{}/task-cancel-{}.json", base(server), id)
+    }
+
+    pub fn task_close(server: &str, id: &str) -> String {
+        format!("{}/task-close-{}.json", base(server), id)
+    }
+
+    pub fn task_activate(server: &str, id: &str) -> String {
+        format!("{}/task-activate-{}.json", base(server), id)
+    }
+
+    pub fn task_comment(server: &str, id: &str) -> String {
+        format!("{}/action-comment-task-{}.html", base(server), id)
+    }
+
+    /// Bug 创建；旧版 9.0.3 路由为 product-branch-module，branch/module 默认 0。
+    pub fn bug_create(server: &str, product: &str) -> String {
+        format!("{}/bug-create-{}-0-0.json", base(server), product)
+    }
+
+    pub fn bug_edit(server: &str, id: &str) -> String {
+        format!("{}/bug-edit-{}.json", base(server), id)
+    }
+
+    pub fn bug_resolve(server: &str, id: &str) -> String {
+        format!("{}/bug-resolve-{}.json", base(server), id)
+    }
+
+    pub fn bug_activate(server: &str, id: &str) -> String {
+        format!("{}/bug-activate-{}.json", base(server), id)
+    }
+
+    pub fn bug_close(server: &str, id: &str) -> String {
+        format!("{}/bug-close-{}.json", base(server), id)
+    }
+
+    pub fn bug_confirm(server: &str, id: &str) -> String {
+        format!("{}/bug-confirm-{}.json", base(server), id)
+    }
+
+    pub fn bug_comment(server: &str, id: &str) -> String {
+        format!("{}/action-comment-bug-{}.html", base(server), id)
+    }
 }
 
 #[cfg(test)]
@@ -58,6 +121,22 @@ mod tests {
         assert_eq!(
             Routes::my_task("https://x.com/"),
             "https://x.com/my-task.json"
+        );
+    }
+
+    #[test]
+    fn write_routes_use_json_suffix() {
+        assert_eq!(
+            Routes::task_edit("https://x.com", "946"),
+            "https://x.com/task-edit-946.json"
+        );
+        assert_eq!(
+            Routes::bug_create("https://x.com", "10"),
+            "https://x.com/bug-create-10-0-0.json"
+        );
+        assert_eq!(
+            Routes::task_comment("https://x.com", "946"),
+            "https://x.com/action-comment-task-946.html"
         );
     }
 }
