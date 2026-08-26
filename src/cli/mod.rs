@@ -23,6 +23,7 @@ pub async fn run() -> ExitCode {
     match cli.command {
         Commands::Login(cmd) => commands::login::handle(cmd, &ctx).await,
         Commands::Logout(cmd) => commands::logout::handle(cmd, &ctx).await,
+        Commands::Config(cmd) => commands::config::handle(cmd, &ctx).await,
         Commands::Project(cmd) => commands::project::handle(cmd, &ctx).await,
         Commands::Task(cmd) => commands::task::handle(cmd, &ctx).await,
         Commands::Bug(cmd) => commands::bug::handle(cmd, &ctx).await,

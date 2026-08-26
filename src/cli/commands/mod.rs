@@ -1,15 +1,18 @@
 pub mod bug;
+pub mod config;
 pub mod login;
 pub mod logout;
 pub mod project;
 pub mod task;
 
 use std::process::ExitCode;
+use std::time::Duration;
 
 use clap::{Parser, Subcommand};
 
 use crate::adapters::zentao_v9::ZentaoV9Client;
 use crate::domain::{AuthError, ZentaoError};
+use crate::infrastructure::config::Config;
 use crate::infrastructure::session::StoredSession;
 
 /// 禅道 CLI
@@ -40,6 +43,8 @@ pub enum Commands {
     Login(login::LoginArgs),
     /// 退出登录
     Logout(logout::LogoutArgs),
+    /// 配置文件管理（server/account/timeout）
+    Config(config::ConfigArgs),
     /// 项目查询
     Project(project::ProjectArgs),
     /// 任务查询与写操作
@@ -80,10 +85,27 @@ pub fn load_session_client(profile: &str) -> Result<ZentaoV9Client, ZentaoError>
             ZentaoError::Auth(AuthError::Other("尚未登录，请先执行 zentao login".into()))
         })?;
 
-    let client = ZentaoV9Client::new(&session.server)
-        .map_err(|e| ZentaoError::Internal(format!("创建 HTTP 客户端失败: {e}")))?;
+    let client = build_client(&session.server, profile_timeout(profile))?;
     client
         .import_cookies(&session.cookie)
         .map_err(|_| ZentaoError::Auth(AuthError::Other("会话文件损坏，请重新登录".into())))?;
     Ok(client)
+}
+
+/// 读取 profile 配置的请求超时（秒）；0 或未配置表示用默认超时。
+pub fn profile_timeout(profile: &str) -> u64 {
+    Config::load(Config::config_path())
+        .ok()
+        .and_then(|c| c.profiles.get(profile).map(|p| p.timeout_seconds))
+        .unwrap_or(0)
+}
+
+/// 按超时配置创建 HTTP 客户端。
+pub fn build_client(server: &str, timeout_seconds: u64) -> Result<ZentaoV9Client, ZentaoError> {
+    let result = if timeout_seconds > 0 {
+        ZentaoV9Client::with_timeout(server, Duration::from_secs(timeout_seconds))
+    } else {
+        ZentaoV9Client::new(server)
+    };
+    result.map_err(|e| ZentaoError::Internal(format!("创建 HTTP 客户端失败: {e}")))
 }

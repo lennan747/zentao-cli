@@ -60,3 +60,53 @@ impl Config {
         Self::config_dir().join("config.toml")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn config_roundtrip_preserves_fields() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("config.toml");
+
+        let mut config = Config {
+            default_profile: "default".to_string(),
+            profiles: std::collections::HashMap::new(),
+        };
+        let profile = Profile {
+            server: "https://x.com".into(),
+            account: "demo-user".into(),
+            timeout_seconds: 60,
+        };
+        config.profiles.insert("default".into(), profile);
+
+        config.save(&path).unwrap();
+        let loaded = Config::load(&path).unwrap();
+
+        assert_eq!(loaded.default_profile, "default");
+        let p = loaded.profiles.get("default").unwrap();
+        assert_eq!(p.server, "https://x.com");
+        assert_eq!(p.account, "demo-user");
+        assert_eq!(p.timeout_seconds, 60);
+    }
+
+    #[test]
+    fn load_missing_file_returns_default() {
+        let dir = TempDir::new().unwrap();
+        let loaded = Config::load(dir.path().join("nope.toml")).unwrap();
+        assert!(loaded.profiles.is_empty());
+        assert!(loaded.default_profile.is_empty());
+    }
+
+    #[test]
+    fn load_missing_timeout_defaults_to_zero() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "default_profile = \"default\"\n\n[profiles.default]\nserver = \"x\"\naccount = \"a\"\n")
+            .unwrap();
+        let loaded = Config::load(&path).unwrap();
+        assert_eq!(loaded.profiles["default"].timeout_seconds, 0);
+    }
+}

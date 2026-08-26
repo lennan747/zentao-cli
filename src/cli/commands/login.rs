@@ -3,8 +3,8 @@ use std::process::ExitCode;
 
 use clap::Args;
 
-use super::{fail, ok, CommandContext};
-use crate::adapters::zentao_v9::{ZentaoV9AuthGateway, ZentaoV9Client};
+use super::{build_client, fail, ok, CommandContext};
+use crate::adapters::zentao_v9::ZentaoV9AuthGateway;
 use crate::application::{AuthGateway, Credentials};
 use crate::domain::{AuthError, ZentaoError};
 use crate::infrastructure::config::Config;
@@ -84,9 +84,9 @@ pub async fn handle(args: LoginArgs, ctx: &CommandContext) -> ExitCode {
         },
     };
 
-    let client = match ZentaoV9Client::new(&server) {
+    let client = match build_client(&server, saved.timeout_seconds) {
         Ok(c) => c,
-        Err(e) => return fail(&internal(format!("创建 HTTP 客户端失败: {e}"))),
+        Err(e) => return fail(&e),
     };
     let gateway = ZentaoV9AuthGateway::new(client);
 
