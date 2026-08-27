@@ -1,6 +1,7 @@
 pub mod commands;
 pub mod confirm;
 pub mod output;
+pub mod style;
 
 use std::process::ExitCode;
 
@@ -52,6 +53,8 @@ pub fn exit_code_from_error(err: &crate::domain::ZentaoError) -> ExitCode {
 
 /// 打印错误到 stderr。
 pub fn report_error(err: &crate::domain::ZentaoError) {
-    error!(error = %err, "command failed");
-    eprintln!("error: {err}");
+    if crate::infrastructure::logging::verbose() {
+        error!(error = %err, "command failed");
+    }
+    eprintln!("{}", crate::cli::style::red(&format!("error: {err}")));
 }

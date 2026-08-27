@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 
 use assert_cmd::Command;
+use predicates::boolean::PredicateBooleanExt;
 use tempfile::TempDir;
 use wiremock::matchers::{body_string_contains, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -153,13 +154,19 @@ async fn task_and_bug_commands_work() {
         .args(["task", "list"])
         .assert()
         .success()
-        .stdout(predicates::str::contains("示例任务-退款处理"));
+        .stdout(predicates::str::contains("示例任务-退款处理"))
+        .stdout(predicates::str::contains("─"))
+        .stdout(predicates::str::contains("优先级"))
+        .stdout(predicates::str::contains("指派给"))
+        .stdout(predicates::str::contains("● 进行中").or(predicates::str::contains("○ 等待中")));
 
     zentao(&home)
         .args(["task", "get", "947"])
         .assert()
         .success()
-        .stdout(predicates::str::contains("示例任务-退款处理"));
+        .stdout(predicates::str::contains("示例任务-退款处理"))
+        .stdout(predicates::str::contains("字段"))
+        .stdout(predicates::str::contains("○ 等待中"));
 
     zentao(&home)
         .args(["bug", "list", "--assigned-to", "me"])
@@ -232,4 +239,79 @@ async fn wrong_password_fails_without_saving_session() {
         !home.path().join("session-default.json").exists(),
         "failed login must not save session"
     );
+}
+
+#[tokio::test]
+async fn empty_list_prints_hint() {
+    let server = MockServer::start().await;
+    mount_login_flow(&server, fixture("task-list.json")).await;
+    Mock::given(method("GET"))
+        .and(path("/project-index.json"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(
+            r#"{"status":"success","data":"{\"title\":\"项目主页\",\"projects\":{}}"}"#,
+        ))
+        .mount(&server)
+        .await;
+
+    let home = TempDir::new().unwrap();
+    zentao(&home)
+        .args([
+            "login",
+            "--server",
+            &server.uri(),
+            "--account",
+            "example-user",
+        ])
+        .write_stdin("secret\n")
+        .assert()
+        .success();
+
+    zentao(&home)
+        .args(["project", "list"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("（无数据）"));
+}
+
+#[tokio::test]
+async fn long_task_name_is_truncated() {
+    let server = MockServer::start().await;
+    let long_name = "超长任务名称".repeat(20);
+    let inner = serde_json::json!({
+        "tasks": [{
+            "id": "1",
+            "project": "43",
+            "projectName": "示例项目",
+            "name": long_name,
+            "status": "wait",
+            "pri": "2",
+            "assignedTo": "example-user",
+        }],
+        "pager": {"recTotal": 1, "recPerPage": 20, "pageTotal": 1, "pageID": 1},
+    });
+    let body = serde_json::json!({
+        "status": "success",
+        "data": inner.to_string(),
+    })
+    .to_string();
+    mount_login_flow(&server, body).await;
+
+    let home = TempDir::new().unwrap();
+    zentao(&home)
+        .args([
+            "login",
+            "--server",
+            &server.uri(),
+            "--account",
+            "example-user",
+        ])
+        .write_stdin("secret\n")
+        .assert()
+        .success();
+
+    zentao(&home)
+        .args(["task", "list"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("..."));
 }

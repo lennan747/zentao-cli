@@ -264,11 +264,7 @@ pub struct CommentArgs {
 }
 
 fn summary(title: &str, items: &[(&str, &str)]) -> String {
-    let mut out = format!("{title}\n");
-    for (k, v) in items {
-        out.push_str(&format!("  {k} = {v}\n"));
-    }
-    out
+    crate::cli::output::render_summary(title, items)
 }
 
 macro_rules! try_write {
@@ -280,7 +276,7 @@ macro_rules! try_write {
         }
         match $call.await {
             Ok(()) => {
-                println!("已提交成功");
+                println!("{}", crate::cli::style::green("已提交成功"));
                 ok()
             }
             Err(e) => fail(&e.into()),

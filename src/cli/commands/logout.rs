@@ -3,6 +3,7 @@ use std::process::ExitCode;
 use clap::Args;
 
 use super::{fail, ok, CommandContext};
+use crate::cli::style;
 use crate::domain::ZentaoError;
 use crate::infrastructure::session::StoredSession;
 
@@ -14,11 +15,14 @@ pub async fn handle(_args: LogoutArgs, ctx: &CommandContext) -> ExitCode {
     let path = StoredSession::session_path(&ctx.profile);
     match StoredSession::remove(&path) {
         Ok(true) => {
-            println!("已退出登录（profile: {}）", ctx.profile);
+            println!(
+                "{}",
+                style::green(&format!("已退出登录（profile: {}）", ctx.profile))
+            );
             ok()
         }
         Ok(false) => {
-            println!("当前没有已保存的会话");
+            println!("{}", style::dim("当前没有已保存的会话"));
             ok()
         }
         Err(e) => fail(&ZentaoError::Internal(format!("删除会话失败: {e}"))),

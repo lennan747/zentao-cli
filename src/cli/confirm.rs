@@ -2,6 +2,7 @@ use std::io::{self, IsTerminal, Write};
 
 use clap::Args;
 
+use crate::cli::style;
 use crate::domain::ZentaoError;
 
 /// 写命令共用的安全选项。
@@ -32,7 +33,10 @@ pub fn confirm_write(summary: &str, flags: WriteFlags) -> Result<WriteControl, Z
     println!("{summary}");
 
     if flags.dry_run {
-        println!("\n[dry-run] 未执行，如需执行去掉 --dry-run");
+        println!(
+            "\n{}",
+            style::yellow("[dry-run] 未执行，如需执行去掉 --dry-run")
+        );
         return Ok(WriteControl::Aborted);
     }
     if flags.yes {
@@ -45,7 +49,7 @@ pub fn confirm_write(summary: &str, flags: WriteFlags) -> Result<WriteControl, Z
     }
 
     loop {
-        print!("确认执行? [y/N] ");
+        print!("{} ", style::yellow("确认执行? [y/N]"));
         io::stdout()
             .flush()
             .map_err(|e| ZentaoError::Internal(format!("写出错: {e}")))?;

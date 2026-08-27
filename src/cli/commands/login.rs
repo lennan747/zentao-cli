@@ -6,6 +6,7 @@ use clap::Args;
 use super::{build_client, fail, ok, CommandContext};
 use crate::adapters::zentao_v9::ZentaoV9AuthGateway;
 use crate::application::{AuthGateway, Credentials};
+use crate::cli::style;
 use crate::domain::{AuthError, ZentaoError};
 use crate::infrastructure::config::Config;
 use crate::infrastructure::session::StoredSession;
@@ -76,7 +77,10 @@ pub async fn handle(args: LoginArgs, ctx: &CommandContext) -> ExitCode {
         Ok(p) => p,
         Err(_) => match prompt("禅道密码: ") {
             Ok(p) if !p.is_empty() => {
-                eprintln!("警告: 当前无终端控制，密码以回显方式从标准输入读取");
+                eprintln!(
+                    "{}",
+                    style::yellow("警告: 当前无终端控制，密码以回显方式从标准输入读取")
+                );
                 p
             }
             Ok(_) => return fail(&ZentaoError::Auth(AuthError::MissingCredentials)),
@@ -116,7 +120,7 @@ pub async fn handle(args: LoginArgs, ctx: &CommandContext) -> ExitCode {
                 return fail(&internal(format!("保存配置失败: {e}")));
             }
 
-            println!("登录成功: {}", stored.server);
+            println!("{}", style::green(&format!("登录成功: {}", stored.server)));
             ok()
         }
         Err(e) => fail(&ZentaoError::Auth(e)),

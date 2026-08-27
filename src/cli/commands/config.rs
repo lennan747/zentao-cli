@@ -5,6 +5,7 @@ use serde::Serialize;
 
 use super::{fail, ok, CommandContext};
 use crate::cli::output;
+use crate::cli::style;
 use crate::domain::ZentaoError;
 use crate::infrastructure::config::Config;
 
@@ -127,19 +128,28 @@ pub async fn handle(args: ConfigArgs, ctx: &CommandContext) -> ExitCode {
             if let Err(e) = config.save(&config_path) {
                 return fail(&ZentaoError::Internal(format!("保存配置失败: {e}")));
             }
-            println!("已设置 {report}（profile: {}）", ctx.profile);
+            println!(
+                "{}",
+                style::green(&format!("已设置 {report}（profile: {}）", ctx.profile))
+            );
             ok()
         }
         ConfigCommands::Init => {
             if config_path.exists() {
-                println!("配置已存在: {}", config_path.display());
+                println!(
+                    "{}",
+                    style::dim(&format!("配置已存在: {}", config_path.display()))
+                );
                 return ok();
             }
             let config = Config::default();
             if let Err(e) = config.save(&config_path) {
                 return fail(&ZentaoError::Internal(format!("保存配置失败: {e}")));
             }
-            println!("已初始化配置: {}", config_path.display());
+            println!(
+                "{}",
+                style::green(&format!("已初始化配置: {}", config_path.display()))
+            );
             ok()
         }
     }
