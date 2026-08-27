@@ -1,35 +1,88 @@
 # zentao-cli
 
+[![GitHub Release](https://img.shields.io/github/v/release/lennan747/zentao-cli)](https://github.com/lennan747/zentao-cli/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/lennan747/zentao-cli/ci.yml?branch=master&label=ci)](https://github.com/lennan747/zentao-cli/actions)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 禅道v9.0.3 命令行客户端。查询当前账号可见的项目、任务和 Bug，并支持对任务与 Bug 的写操作（创建、编辑、指派、状态流转、评论，默认交互确认）。
+
+## 特性
+
+- **只读查询**：项目、任务、Bug 的 `list` / `get`，支持状态过滤与 `--format json` 结构化输出。
+- **写操作**：任务与 Bug 的创建、编辑、指派、状态流转、评论。
+- **安全护栏**：写命令默认打印摘要并交互确认；`--dry-run` 只预览不提交；无 TTY 拒绝执行；密码不落盘、不进命令行与日志。
+- **友好输出**：极简表格、中文列头与字段名、语义配色、长文本折行与超长截断（详见「输出样式」）。
+- **多环境配置**：`--profile` 支持多套服务器/账号配置。
+
+## 目录
+
+- [安装](#安装)
+- [快速开始](#快速开始)
+- [命令](#命令)
+  - [通用](#通用)
+  - [配置](#配置)
+  - [认证](#认证)
+  - [项目](#项目)
+  - [任务](#任务)
+  - [Bug](#bug)
+- [配置与凭据安全](#配置与凭据安全)
+- [输出字段](#输出字段)
+- [退出码](#退出码)
+- [故障排查](#故障排查)
+- [卸载](#卸载)
+- [开发](#开发)
 
 ## 安装
 
-```bash
-# 方式一：本地安装
-cargo install --path .
+> 要求：Linux / macOS x86_64 或 macOS arm64，支持 SHA256 校验；Windows 请使用 [WSL](https://learn.microsoft.com/windows/wsl/install) 后按 Linux 方式安装，或手动下载对应资产。Rust 源码安装要求 Rust >= 1.80。
 
-# 方式二：直接使用 release 二进制
+### 一键安装（推荐）
+
+从 GitHub Releases 拉取最新二进制，自动校验 SHA256：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lennan747/zentao-cli/master/install.sh | sh
+```
+
+- 安装到 `~/.local/bin/zentao-cli`（可用 `ZENTAO_CLI_INSTALL_DIR` 覆盖）。
+- 指定版本：`ZENTAO_CLI_VERSION=v0.1.0 curl -fsSL https://raw.githubusercontent.com/lennan747/zentao-cli/master/install.sh | sh`。
+
+### cargo 安装
+
+```bash
+cargo install --git https://github.com/lennan747/zentao-cli.git --locked
+```
+
+### 手动构建
+
+```bash
+git clone https://github.com/lennan747/zentao-cli.git
+cd zentao-cli
 cargo build --release --locked
 ./target/release/zentao-cli --version
 ```
 
-要求 Rust >= 1.80。二进制名为 `zentao-cli`。
+安装后请先 [登录](#login)。
 
 ## 快速开始
 
 ```bash
-# 登录（密码无回显输入，不进入命令行参数和日志）
+# 1. 登录（密码无回显输入，不进入命令行参数和日志）
 zentao-cli login --server https://zentao.example.com --account <你的账号>
 
-# 查询
+# 2. 查询
 zentao-cli project list
-zentao-cli project get 43
+zentao-cli project get 101
 zentao-cli task list
-zentao-cli task get 971
+zentao-cli task get 1001
 zentao-cli bug list --assigned-to me
-zentao-cli bug get 41292
+zentao-cli bug get 2001
 
-# 退出登录
+# 3. 写操作（默认需确认；可用 --dry-run 先预览）
+zentao-cli task start 1001 --left 5 --dry-run
+zentao-cli task comment 1001 --comment "已确认排期"
+
+# 4. 退出登录
 zentao-cli logout
 ```
 
@@ -121,7 +174,7 @@ zentao-cli config set <key> <value>
 
 ```bash
 zentao-cli config set server https://zentao.example.com
-zentao-cli config set account demo-user
+zentao-cli config set account <你的账号>
 zentao-cli config set timeout 60
 ```
 
@@ -154,10 +207,10 @@ zentao-cli login [--server <url>] [--account <账号>]
 
 ```bash
 # 交互式（密码无回显）
-zentao-cli login --server https://zentao.example.com --account demo-user
+zentao-cli login --server https://zentao.example.com --account <你的账号>
 
 # 脚本（密码走 stdin，会打印警告）
-echo "$PASSWORD" | zentao-cli login --server https://zentao.example.com --account demo-user
+echo "$PASSWORD" | zentao-cli login --server https://zentao.example.com --account <你的账号>
 ```
 
 #### logout
@@ -204,7 +257,7 @@ zentao-cli project get <id>
 返回字段：id、code、name、status、desc、pm、begin、end。
 
 ```bash
-zentao-cli project get 43
+zentao-cli project get 101
 ```
 
 ---
@@ -240,7 +293,7 @@ zentao-cli task get <id>
 返回字段：id、project_id、project_name、name、status、priority、assigned_to、desc、opened_by、opened_date、deadline、estimate、consumed、left。
 
 ```bash
-zentao-cli task get 946
+zentao-cli task get 1001
 ```
 
 #### task create
@@ -266,7 +319,7 @@ zentao-cli task create <project> --name <名称> [选项...]
 | `--mailto <账号>` | 否 | 抄送，可多次指定 |
 
 ```bash
-zentao-cli task create 43 --name "修复登录页样式" --pri 2 --assigned-to demo-user
+zentao-cli task create 101 --name "修复登录页样式" --pri 2 --assigned-to <你的账号>
 ```
 
 #### task edit
@@ -296,7 +349,7 @@ zentao-cli task edit <id> [选项...]
 > 编辑会连同当前对象全部字段基线一并提交。禅道旧版接口对未提交的字段会按空值处理（清空），详细说明见「通用」安全护栏。
 
 ```bash
-zentao-cli task edit 946 --deadline 2026-06-16 --comment "调整排期"
+zentao-cli task edit 1001 --deadline 2026-06-16 --comment "调整排期"
 ```
 
 #### task assign
@@ -314,7 +367,7 @@ zentao-cli task assign <id> <账号> [--comment <备注>]
 | `--comment <备注>` | 否 | 附带评论 |
 
 ```bash
-zentao-cli task assign 946 demo-user --comment "你来跟进"
+zentao-cli task assign 1001 <你的账号> --comment "你来跟进"
 ```
 
 #### task start
@@ -337,7 +390,7 @@ zentao-cli task start <id> [选项...]
 > 前置条件：仅 wait/pause 状态可开始，否则 CLI 拒绝执行。
 
 ```bash
-zentao-cli task start 978 --left 5 --consumed 0.5
+zentao-cli task start 1001 --left 5 --consumed 0.5
 ```
 
 #### task finish
@@ -359,7 +412,7 @@ zentao-cli task finish <id> --consumed <本次耗时> [选项...]
 > 前置条件：仅 wait/doing 状态可完成。CLI 会自动提交之前的总计消耗作为基线，避免服务端"总计消耗必须大于之前消耗"误报。
 
 ```bash
-zentao-cli task finish 946 --consumed 2 --comment "已验收通过"
+zentao-cli task finish 1001 --consumed 2 --comment "已验收通过"
 ```
 
 #### task cancel
@@ -373,7 +426,7 @@ zentao-cli task cancel <id> [--comment <备注>]
 > 前置条件：仅 wait/doing/pause 状态可取消。
 
 ```bash
-zentao-cli task cancel 978 --comment "需求变更，不再需要"
+zentao-cli task cancel 1001 --comment "需求变更，不再需要"
 ```
 
 #### task close
@@ -384,10 +437,10 @@ zentao-cli task cancel 978 --comment "需求变更，不再需要"
 zentao-cli task close <id> [--comment <备注>]
 ```
 
-> 前置条件：仅 done 状态可关闭。本账号可能无此权限（透传 `user-deny`）。
+> 前置条件：仅 done 状态可关闭。部分账号可能无此权限（透传 `user-deny`）。
 
 ```bash
-zentao-cli task close 946 --comment "客户确认完成"
+zentao-cli task close 1001 --comment "客户确认完成"
 ```
 
 #### task activate
@@ -398,10 +451,10 @@ zentao-cli task close 946 --comment "客户确认完成"
 zentao-cli task activate <id> [--comment <备注>]
 ```
 
-> 前置条件：仅 done/cancel/closed 状态可激活。本账号可能无此权限（透传 `user-deny`）。
+> 前置条件：仅 done/cancel/closed 状态可激活。部分账号可能无此权限（透传 `user-deny`）。
 
 ```bash
-zentao-cli task activate 946 --comment "需要重新打开"
+zentao-cli task activate 1001 --comment "需要重新打开"
 ```
 
 #### task comment
@@ -418,7 +471,7 @@ zentao-cli task comment <id> --comment <内容>
 | `--comment <内容>` | 是 | 评论内容，不能为空 |
 
 ```bash
-zentao-cli task comment 946 --comment "已和客户确认排期"
+zentao-cli task comment 1001 --comment "已和客户确认排期"
 ```
 
 ---
@@ -454,7 +507,7 @@ zentao-cli bug get <id>
 返回字段：id、product_id、product_name、project_id、title、status、severity、priority、assigned_to、opened_by、opened_date、steps。
 
 ```bash
-zentao-cli bug get 41292
+zentao-cli bug get 2001
 ```
 
 #### bug create
@@ -484,7 +537,7 @@ zentao-cli bug create <product> --title <标题> [选项...]
 | `--mailto <账号>` | 否 | 抄送，可多次指定 |
 
 ```bash
-zentao-cli bug create 10 --title "登录页报 500" --severity 2 --assigned-to demo-user
+zentao-cli bug create 201 --title "登录页报 500" --severity 2 --assigned-to <你的账号>
 ```
 
 #### bug edit
@@ -517,7 +570,7 @@ zentao-cli bug edit <id> [选项...]
 > 同 task edit，编辑会连同当前字段基线一并提交。
 
 ```bash
-zentao-cli bug edit 41292 --severity 1 --comment "升级严重程度"
+zentao-cli bug edit 2001 --severity 1 --comment "升级严重程度"
 ```
 
 #### bug assign
@@ -529,7 +582,7 @@ zentao-cli bug assign <id> <账号> [--comment <备注>]
 ```
 
 ```bash
-zentao-cli bug assign 41292 demo-user
+zentao-cli bug assign 2001 <你的账号>
 ```
 
 #### bug resolve
@@ -550,7 +603,7 @@ zentao-cli bug resolve <id> [选项...]
 | `--comment <备注>` | 否 | 附带评论 |
 
 ```bash
-zentao-cli bug resolve 41292 --resolution fixed --comment "已修复"
+zentao-cli bug resolve 2001 --resolution fixed --comment "已修复"
 ```
 
 #### bug activate
@@ -562,7 +615,7 @@ zentao-cli bug activate <id> [--assigned-to <账号>] [--opened-build <build>] [
 ```
 
 ```bash
-zentao-cli bug activate 41292 --assigned-to demo-user --comment "需要重新处理"
+zentao-cli bug activate 2001 --assigned-to <你的账号> --comment "需要重新处理"
 ```
 
 #### bug close
@@ -573,10 +626,10 @@ zentao-cli bug activate 41292 --assigned-to demo-user --comment "需要重新处
 zentao-cli bug close <id> [--comment <备注>]
 ```
 
-> 本账号可能无此权限（透传 `user-deny`）。
+> 部分账号可能无此权限（透传 `user-deny`）。
 
 ```bash
-zentao-cli bug close 41292 --comment "客户确认无需修复"
+zentao-cli bug close 2001 --comment "客户确认无需修复"
 ```
 
 #### bug confirm
@@ -587,10 +640,10 @@ zentao-cli bug close 41292 --comment "客户确认无需修复"
 zentao-cli bug confirm <id> [--comment <备注>]
 ```
 
-> 本账号可能无此权限（透传 `user-deny`）。
+> 部分账号可能无此权限（透传 `user-deny`）。
 
 ```bash
-zentao-cli bug confirm 41292 --comment "已确认"
+zentao-cli bug confirm 2001 --comment "已确认"
 ```
 
 #### bug comment
@@ -607,7 +660,7 @@ zentao-cli bug comment <id> --comment <内容>
 | `--comment <内容>` | 是 | 评论内容，不能为空 |
 
 ```bash
-zentao-cli bug comment 41292 --comment "和产品确认了，下个版本修"
+zentao-cli bug comment 2001 --comment "和产品确认了，下个版本修"
 ```
 
 ## 配置与凭据安全
@@ -621,13 +674,13 @@ default_profile = "default"
 
 [profiles.default]
 server = "https://zentao.example.com"
-account = "demo-user"
+account = "<你的账号>"
 timeout_seconds = 60
 
 # 多环境示例：额外的 profile
 [profiles.customer]
 server = "https://customer.example.com"
-account = "demo-user"
+account = "<你的账号>"
 timeout_seconds = 30
 ```
 
@@ -684,8 +737,14 @@ JSON 输出字段即内部稳定 DTO：
 ## 卸载
 
 ```bash
-cargo uninstall zentao-cli   # 若用 cargo install 安装
-rm -rf ~/.config/zentao-cli  # 配置与会话
+# 脚本安装
+rm -f ~/.local/bin/zentao-cli
+
+# cargo 安装
+cargo uninstall zentao-cli
+
+# 配置与会话
+rm -rf ~/.config/zentao-cli
 ```
 
 ## 开发
@@ -697,14 +756,12 @@ cargo clippy --all-targets -- -D warnings
 cargo build --release --locked
 ```
 
-架构与测试边界见 `tasks/zhongqi-zentao-cli/design/rust-cli-framework.md`。
-
 分层结构：
 
 ```text
 src/cli/            参数解析、输出格式、退出码
 src/application/    端口（trait）：认证与三类查询
 src/domain/         DTO、枚举、错误模型（不依赖 clap/reqwest）
-src/adapters/zentao_v9/  禅道 9.0.3 旧版 .json 接口唯一适配层
+src/adapters/zentao_v9/  禅道 v9.0.3 旧版 .json 接口唯一适配层
 src/infrastructure/ 配置、会话存储、日志
 ```
