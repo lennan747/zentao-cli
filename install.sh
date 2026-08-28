@@ -67,7 +67,10 @@ curl -fsSL -o "$TMP/$ASSET" "$BASE/$ASSET" || die "下载失败: $BASE/$ASSET"
 
 log "下载并校验 SHA256SUMS ..."
 curl -fsSL -o "$TMP/SHA256SUMS" "$BASE/SHA256SUMS" || die "下载 SHA256SUMS 失败"
-(cd "$TMP" && sha256sum -c SHA256SUMS) || die "SHA256 校验失败，已中止安装（请勿绕过校验）"
+# SHA256SUMS 包含全部平台资产，只提取本资产所在行进行校验
+grep " $ASSET$" "$TMP/SHA256SUMS" > "$TMP/checksums.txt" \
+    || die "SHA256SUMS 中未找到 $ASSET 的校验值"
+(cd "$TMP" && sha256sum -c checksums.txt) || die "SHA256 校验失败，已中止安装（请勿绕过校验）"
 log "校验通过"
 
 # --- 4. 解压并安装 -----------------------------------------------------------
