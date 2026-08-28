@@ -18,6 +18,7 @@
 
 - [安装](#安装)
 - [快速开始](#快速开始)
+- [AI Agent Skill](#ai-agent-skill)
 - [命令](#命令)
   - [通用](#通用)
   - [配置](#配置)
@@ -84,6 +85,23 @@ zentao-cli task comment 1001 --comment "已确认排期"
 
 # 4. 退出登录
 zentao-cli logout
+```
+
+## AI Agent Skill
+
+本仓库附带一份面向 AI Agent 的 [Skill](skills/zentao-cli/SKILL.md)，供 Claude Code / opencode 等 AI 编码工具调用 `zentao-cli` 时加载：包含命令速查、JSON 输出契约、退出码表、写操作安全准则（先 `--dry-run`、经用户确认、状态流转约束）与枚举值速查。
+
+安装到 opencode（全局技能，改完需**重启 opencode** 生效）：
+
+```bash
+mkdir -p ~/.config/opencode/skills
+cp -r skills/zentao-cli ~/.config/opencode/skills/
+```
+
+安装到 Claude Code：
+
+```bash
+cp -r skills/zentao-cli ~/.claude/skills/
 ```
 
 ## 命令
