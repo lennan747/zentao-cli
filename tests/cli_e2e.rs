@@ -405,3 +405,68 @@ async fn long_task_name_is_truncated() {
         .success()
         .stdout(predicates::str::contains("..."));
 }
+
+#[tokio::test]
+async fn update_check_reports_up_to_date() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/repos/lennan747/zentao-cli/releases/latest"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"tag_name": "v0.1.1"})),
+        )
+        .mount(&server)
+        .await;
+
+    let home = TempDir::new().unwrap();
+    zentao(&home)
+        .env("ZENTAO_CLI_UPDATE_API", server.uri())
+        .args(["update", "--check"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("已是最新"));
+}
+
+#[tokio::test]
+async fn update_check_reports_newer() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/repos/lennan747/zentao-cli/releases/latest"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"tag_name": "v9.9.9"})),
+        )
+        .mount(&server)
+        .await;
+
+    let home = TempDir::new().unwrap();
+    zentao(&home)
+        .env("ZENTAO_CLI_UPDATE_API", server.uri())
+        .args(["update", "--check"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("有新版本"))
+        .stdout(predicates::str::contains("9.9.9"));
+}
+
+#[tokio::test]
+async fn update_dry_run_previews_without_downloading() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/repos/lennan747/zentao-cli/releases/latest"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"tag_name": "v9.9.9"})),
+        )
+        .mount(&server)
+        .await;
+
+    let home = TempDir::new().unwrap();
+    zentao(&home)
+        .env("ZENTAO_CLI_UPDATE_API", server.uri())
+        .env("ZENTAO_CLI_UPDATE_DOWNLOAD", server.uri())
+        .args(["update", "--dry-run"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("目标版本"))
+        .stdout(predicates::str::contains("9.9.9"))
+        .stdout(predicates::str::contains("releases/download/v9.9.9"))
+        .stdout(predicates::str::contains("[dry-run] 未执行"));
+}

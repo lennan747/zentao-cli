@@ -39,6 +39,7 @@ pub async fn run() -> ExitCode {
             run_with_session_recovery(&ctx.profile, || commands::bug::handle(cmd.clone(), &ctx))
                 .await
         }
+        Commands::Update(cmd) => commands::update::handle(cmd, &ctx).await,
     }
 }
 

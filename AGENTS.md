@@ -4,6 +4,7 @@
 
 - 本项目是独立的 Rust CLI 应用，位于项目根目录。
 - 只与禅道v9.0.3 的旧版 `.json` 接口交互，首期只读。
+- `update` 命令只访问 GitHub Releases（默认 `lennan747/zentao-cli`），可用 `ZENTAO_CLI_UPDATE_API` / `ZENTAO_CLI_UPDATE_DOWNLOAD` 覆盖镜像地址。
 
 ## 分层依赖
 

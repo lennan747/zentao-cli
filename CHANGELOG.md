@@ -8,6 +8,7 @@
 
 ### 新增
 
+- 自更新命令 `zentao-cli update`：查询最新版本、下载发布资产、SHA256 校验、解包并替换当前可执行文件（支持 Linux x86_64 / macOS arm64 / Windows x86_64；默认交互确认，`--yes`/`--dry-run`/`--check`/`--version`/`--repo` 可选；镜像可用 `ZENTAO_CLI_UPDATE_API` / `ZENTAO_CLI_UPDATE_DOWNLOAD` 覆盖）。Windows 下旧文件改名为 `zentao-cli.exe.old`。
 - 详情富文本图片提取：`project get` / `task get` / `bug get` 提取 `desc`/`steps` 中的 `<img>` 为绝对 URL 列表（`desc_images` / `steps_images`，无图片时省略），表格输出中图片 URL 内嵌在「描述 / 重现步骤」单元格末尾，且富文本段落换行与原页面一致（不再压成单行）。
 - Bug 详情历史记录：`bug get` 解析 `data.actions` 为 `history` 动作日志（`date`/`actor`/`action`/`comment`/`fields`），表格输出本地化为中文（`时间 操作人 动作: 字段 旧值 → 新值`）。
 - Bug 详情项目名：`BugDetail.project_name`（来自 `bug.projectName`），表格「所属项目」显示名称而非 ID。

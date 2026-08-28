@@ -274,6 +274,38 @@ echo "$PASSWORD" | zentao-cli login --server https://zentao.example.com --accoun
 zentao-cli logout
 ```
 
+#### update
+
+把 `zentao-cli` 自身更新到最新版本（下载发布资产 → SHA256 校验 → 解包 → 替换当前可执行文件）。
+
+```
+zentao-cli update [--version <版本>] [--repo <owner/repo>] [--check] [--yes] [--dry-run]
+```
+
+| 选项 | 必填 | 说明 |
+|---|---|---|
+| `--version <vX.Y.Z>` | 否 | 目标版本（默认最新；可指定旧版本降级） |
+| `--repo <owner/repo>` | 否 | 发布仓库，默认 `lennan747/zentao-cli` |
+| `--check` | 否 | 只检查是否有新版本，不下载（有/无更新都返回退出码 0，靠文本区分） |
+| `--yes` | 否 | 跳过交互确认 |
+| `--dry-run` | 否 | 只打印将执行的动作（目标版本、资产、下载地址），不下载不替换 |
+
+- 默认交互确认（复用写操作的安全护栏：`--dry-run` 只预览、`--yes` 跳过、无 TTY 拒绝）。
+- 只替换当前运行的可执行文件；Windows 下旧文件会先改名为 `zentao-cli.exe.old`（可手动删除）。
+- 支持平台与一键安装一致：Linux x86_64 / macOS arm64 / Windows x86_64。
+- 镜像/代理：可用环境变量 `ZENTAO_CLI_UPDATE_API`（GitHub API 基地址）与 `ZENTAO_CLI_UPDATE_DOWNLOAD`（下载基地址）覆盖默认 GitHub 地址。
+
+```bash
+# 检查是否有新版本
+zentao-cli update --check
+
+# 预览更新计划
+zentao-cli update --dry-run
+
+# 交互确认后更新
+zentao-cli update
+```
+
 ---
 
 ### 项目

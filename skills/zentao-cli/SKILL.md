@@ -5,7 +5,7 @@ description: 通过 zentao-cli 命令行操作禅道（禅道v9.0.3 旧版 .json
 
 # zentao-cli（禅道 CLI）Skill
 
-用 `zentao-cli` 帮用户操作禅道。本工具对接禅道 v9.0.3 的旧版 `.json` 接口，覆盖 `login/logout/config/project/task/bug` 六类命令。
+用 `zentao-cli` 帮用户操作禅道。本工具对接禅道 v9.0.3 的旧版 `.json` 接口，覆盖 `login/logout/config/project/task/bug/update` 七类命令。
 
 ## 一、前置检查（开始前必须做）
 
@@ -58,6 +58,16 @@ zentao-cli config set <key> <value>        # key: server / account / timeout(秒
 zentao-cli login [-s 地址] [-a 账号]       # 已存密码则免输入，否则交互输密码
 zentao-cli logout
 ```
+
+### 自更新
+```bash
+zentao-cli update --check                   # 只检查是否有新版本（有/无更新都返回退出码 0）
+zentao-cli update --dry-run                 # 预览更新计划（目标版本/资产/下载地址），不下载
+zentao-cli update [--version vX.Y.Z] [--yes]   # 下载校验后替换当前 exe（默认交互确认）
+```
+
+- `update` 不需要登录，也不需要配置；仅支持 Linux x86_64 / macOS arm64 / Windows x86_64。
+- Windows 下旧 exe 改名为 `zentao-cli.exe.old`；镜像/代理可用 `ZENTAO_CLI_UPDATE_API` / `ZENTAO_CLI_UPDATE_DOWNLOAD` 覆盖 GitHub 地址。
 
 ### 项目（只读）
 ```bash
