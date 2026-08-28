@@ -65,7 +65,10 @@ try {
                   else { Join-Path $env:LOCALAPPDATA "$Project\bin" }
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
     Expand-Archive -Path $zip -DestinationPath $Tmp -Force
-    Copy-Item -Path (Join-Path $Tmp "$Project.exe") -Destination $InstallDir -Force
+    # 兼容 zip 内为扁平或带路径两种布局
+    $exe = Get-ChildItem -Path $Tmp -Recurse -Filter "$Project.exe" | Select-Object -First 1
+    if (-not $exe) { Die "压缩包内未找到 $Project.exe" }
+    Copy-Item -Path $exe.FullName -Destination $InstallDir -Force
 
     # --- 5. 写入用户 PATH（新终端生效） --------------------------------------
     if (-not $env:ZENTAO_CLI_NO_PATH) {

@@ -1,9 +1,9 @@
 name: install-test
 
+# 手动触发的一键安装回归检查（release 流程已内置 verify job；
+# GITHUB_TOKEN 创建的 release 不会触发本仓库其他 workflow，故不监听 release 事件）。
 on:
   workflow_dispatch:
-  release:
-    types: [published]
 
 jobs:
   windows-one-click-install:
