@@ -17,7 +17,7 @@ use crate::infrastructure::session::StoredSession;
 
 /// 禅道 CLI
 #[derive(Debug, Parser)]
-#[command(name = "zentao")]
+#[command(name = "zentao-cli")]
 #[command(about = "禅道v9.0.3 命令行客户端")]
 #[command(version)]
 pub struct Cli {

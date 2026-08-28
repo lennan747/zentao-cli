@@ -2,9 +2,13 @@
 name = "zentao-cli"
 version = "0.1.0"
 edition = "2021"
-authors = ["leo <leo@example.com>"]
+authors = ["zhanglinan <lennan747@gmail.com>"]
 license = "MIT"
 description = "禅道v9.0.3 命令行客户端"
+repository = "https://github.com/lennan747/zentao-cli"
+keywords = ["zentao", "cli", "command-line", "bug-tracking", "productivity"]
+categories = ["command-line-utilities"]
+readme = "README.md"
 rust-version = "1.80"
 
 [dependencies]
