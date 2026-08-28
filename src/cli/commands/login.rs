@@ -71,20 +71,26 @@ pub async fn handle(args: LoginArgs, ctx: &CommandContext) -> ExitCode {
         },
     };
 
-    // 密码只经无回显终端读取；无 TTY（管道/脚本）时退化为普通 stdin 读取，
-    // 不进入参数、日志或配置。
-    let password = match rpassword::prompt_password("禅道密码: ") {
-        Ok(p) => p,
-        Err(_) => match prompt("禅道密码: ") {
-            Ok(p) if !p.is_empty() => {
-                eprintln!(
-                    "{}",
-                    style::yellow("警告: 当前无终端控制，密码以回显方式从标准输入读取")
-                );
-                p
-            }
-            Ok(_) => return fail(&ZentaoError::Auth(AuthError::MissingCredentials)),
-            Err(e) => return fail(&e),
+    // 密码优先取配置（显式设置过才用），否则经无回显终端读取；
+    // 无 TTY（管道/脚本）时退化为普通 stdin 读取。不进入参数或日志。
+    let password = match saved.password.clone().filter(|p| !p.is_empty()) {
+        Some(p) => {
+            eprintln!("{}", style::dim("使用配置中的密码登录（不显示）"));
+            p
+        }
+        None => match rpassword::prompt_password("禅道密码: ") {
+            Ok(p) => p,
+            Err(_) => match prompt("禅道密码: ") {
+                Ok(p) if !p.is_empty() => {
+                    eprintln!(
+                        "{}",
+                        style::yellow("警告: 当前无终端控制，密码以回显方式从标准输入读取")
+                    );
+                    p
+                }
+                Ok(_) => return fail(&ZentaoError::Auth(AuthError::MissingCredentials)),
+                Err(e) => return fail(&e),
+            },
         },
     };
 

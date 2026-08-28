@@ -8,13 +8,13 @@ use crate::application::{ProjectGateway, ProjectQuery};
 use crate::cli::output;
 use crate::domain::{EntityId, ZentaoError};
 
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct ProjectArgs {
     #[command(subcommand)]
     pub command: ProjectCommands,
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Debug, Clone, Subcommand)]
 pub enum ProjectCommands {
     /// 列出项目
     List(ListArgs),
@@ -22,14 +22,14 @@ pub enum ProjectCommands {
     Get(GetArgs),
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct ListArgs {
     /// 状态过滤（wait/doing/done/suspended/closed，all 表示全部）
     #[arg(short, long)]
     pub status: Option<String>,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct GetArgs {
     /// 项目 ID
     pub id: String,

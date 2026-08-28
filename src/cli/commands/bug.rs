@@ -11,13 +11,13 @@ use crate::domain::{
     BugActivateParams, BugDraft, BugEdit, BugNoteParams, BugResolveParams, EntityId, ZentaoError,
 };
 
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct BugArgs {
     #[command(subcommand)]
     pub command: BugCommands,
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Debug, Clone, Subcommand)]
 pub enum BugCommands {
     /// 列出指派给我的 Bug
     List(ListArgs),
@@ -41,7 +41,7 @@ pub enum BugCommands {
     Comment(CommentArgs),
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct ListArgs {
     /// 指派对象（旧版接口仅支持 me）
     #[arg(short, long)]
@@ -51,13 +51,13 @@ pub struct ListArgs {
     pub status: Option<String>,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct GetArgs {
     /// Bug ID
     pub id: String,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct CreateArgs {
     /// 产品 ID（Bug 必须归属某产品）
     pub product: String,
@@ -122,7 +122,7 @@ pub struct CreateArgs {
     pub write: WriteFlags,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct EditArgs {
     /// Bug ID
     pub id: String,
@@ -169,7 +169,7 @@ pub struct EditArgs {
     pub write: WriteFlags,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct AssignArgs {
     /// Bug ID
     pub id: String,
@@ -182,7 +182,7 @@ pub struct AssignArgs {
     pub write: WriteFlags,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct ResolveArgs {
     /// Bug ID
     pub id: String,
@@ -210,7 +210,7 @@ pub struct ResolveArgs {
     pub write: WriteFlags,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct ActivateArgs {
     /// Bug ID
     pub id: String,
@@ -226,7 +226,7 @@ pub struct ActivateArgs {
     pub write: WriteFlags,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct CloseArgs {
     /// Bug ID
     pub id: String,
@@ -238,7 +238,7 @@ pub struct CloseArgs {
     pub write: WriteFlags,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct ConfirmArgs {
     /// Bug ID
     pub id: String,
@@ -250,7 +250,7 @@ pub struct ConfirmArgs {
     pub write: WriteFlags,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct CommentArgs {
     /// Bug ID
     pub id: String,

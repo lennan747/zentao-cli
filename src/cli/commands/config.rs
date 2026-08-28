@@ -22,7 +22,7 @@ pub enum ConfigCommands {
     Path,
     /// 显示当前配置
     Show,
-    /// 设置登录参数（server / account / timeout）
+    /// 设置登录参数（server / account / timeout / password）
     Set(SetArgs),
     /// 初始化配置文件模板（已存在则不改动）
     Init,
@@ -30,14 +30,14 @@ pub enum ConfigCommands {
 
 #[derive(Debug, Args)]
 pub struct SetArgs {
-    /// 配置键：server / account / timeout（秒）
+    /// 配置键：server / account / timeout（秒）/ password
     pub key: String,
 
-    /// 配置值
+    /// 配置值（password 传空串可清除已保存的密码）
     pub value: String,
 }
 
-/// 供 `config show` 输出的视图（不含密码等敏感信息）。
+/// 供 `config show` 输出的视图（密码掩码，不泄露明文）。
 #[derive(Debug, Serialize)]
 struct ConfigView {
     path: String,
@@ -46,6 +46,7 @@ struct ConfigView {
     server: String,
     account: String,
     timeout_seconds: u64,
+    password: String,
 }
 
 pub async fn handle(args: ConfigArgs, ctx: &CommandContext) -> ExitCode {
@@ -74,6 +75,12 @@ pub async fn handle(args: ConfigArgs, ctx: &CommandContext) -> ExitCode {
                 server: profile.server,
                 account: profile.account,
                 timeout_seconds: profile.timeout_seconds,
+                password: profile
+                    .password
+                    .as_deref()
+                    .map(|p| if p.is_empty() { "" } else { "****" })
+                    .unwrap_or("")
+                    .to_string(),
             };
             match output::print_value(&view, ctx.format) {
                 Ok(()) => ok(),
@@ -113,10 +120,20 @@ pub async fn handle(args: ConfigArgs, ctx: &CommandContext) -> ExitCode {
                     profile.timeout_seconds = seconds;
                     format!("timeout_seconds = {seconds}")
                 }
+                "password" => {
+                    let value = set.value.trim();
+                    if value.is_empty() {
+                        profile.password = None;
+                        "password 已清除".to_string()
+                    } else {
+                        profile.password = Some(value.to_string());
+                        "password = ****（已保存，明文存储于 config.toml，权限 0o600）".to_string()
+                    }
+                }
                 other => {
                     return fail(&ZentaoError::Query(
                         crate::domain::QueryError::InvalidParameter(format!(
-                            "不支持的配置键: {other}（可用: server / account / timeout）"
+                            "不支持的配置键: {other}（可用: server / account / timeout / password）"
                         )),
                     ));
                 }

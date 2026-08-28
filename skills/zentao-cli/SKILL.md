@@ -18,7 +18,8 @@ description: 通过 zentao-cli 命令行操作禅道（禅道v9.0.3 旧版 .json
    - 多套环境用 `--profile <name>` 区分（默认 `default`）。
 3. **确认已登录**：会话文件存在才算登录（会话过期/未登录表现为退出码 3）。
    - 登录命令：`zentao-cli login [-s <地址>] [-a <账号>]`
-   - **重要**：`login` 是无回显交互式密码输入（`rpassword`），**AI 无法代输密码**。你必须把命令交给用户，让用户在本终端输入密码；无 TTY 时退化为 stdin 读取。密码不落盘、不进命令行参数与日志。
+   - **密码来源**：优先用配置中已保存的密码（`zentao-cli config set password <密码>`，明文存 config.toml、权限 0o600），登录免交互；未保存时 `login` 是无回显交互式输入（`rpassword`），**AI 无法代输密码**，必须把命令交给用户在本终端输入。密码始终不进入命令行参数与日志。
+   - **会话过期**：查询/写命令遇退出码 3 且已保存密码时，会自动重登并重试一次；若仍失败再让用户重新 `login`。
 
 ## 二、全局参数
 
@@ -34,7 +35,7 @@ description: 通过 zentao-cli 命令行操作禅道（禅道v9.0.3 旧版 .json
 | 退出码 | 含义 | 处理 |
 |---|---|---|
 | `0` | 成功 | — |
-| `3` | 认证/授权错误：密码错、会话过期、未登录、缺凭据 | 引导用户重新 `login` |
+| `3` | 认证/授权错误：密码错、会话过期、未登录、缺凭据 | 已保存密码时自动重登重试；否则引导用户 `login` |
 | `4` | 资源不存在 / 无权限 | 确认 ID 是否正确、账号是否有权限 |
 | `6` | 参数无效 / 远端校验拒绝 / 响应无法解析 / 网络或远端错误 | 检查参数取值，读错误信息 |
 | `7` | 内部错误 | 反馈 bug，附 `-v` 日志（自查不含敏感信息） |
@@ -47,9 +48,9 @@ description: 通过 zentao-cli 命令行操作禅道（禅道v9.0.3 旧版 .json
 ```bash
 zentao-cli config init                     # 初始化配置模板（已存在则不动）
 zentao-cli config path                     # 配置文件路径
-zentao-cli config show                     # 显示当前配置（无敏感信息）
-zentao-cli config set <key> <value>        # key: server / account / timeout(秒)
-zentao-cli login [-s 地址] [-a 账号]       # 交互输密码
+zentao-cli config show                     # 显示当前配置（密码掩码为 ****）
+zentao-cli config set <key> <value>        # key: server / account / timeout(秒) / password（空串清除）
+zentao-cli login [-s 地址] [-a 账号]       # 已存密码则免输入，否则交互输密码
 zentao-cli logout
 ```
 
@@ -140,13 +141,13 @@ zentao-cli bug comment <id> <内容>
 - 本工具会被 AI 调用以在禅道上执行写操作，存在误操作风险。**写操作必须经用户明确确认**（见第五部分铁律）。
 - **不得**把服务器地址、账号、任务/Bug 内容、会话信息输出到公开渠道或写入仓库提交。
 - `-v` 日志不含密码与 Cookie，但粘贴给别人前仍要自查一遍。
-- 密码不保存到配置/会话文件；会话文件权限 `0o600`；配置文件位置见 `config path`。
+- 密码**可选**保存到配置（明文，config.toml 权限 `0o600`），未保存时仅登录时经无回显终端读取；会话文件权限 `0o600`；配置文件位置见 `config path`。密码始终不进入命令行参数与日志。
 
 ## 八、故障排查
 
 | 现象 | 原因 | 处理 |
 |---|---|---|
-| 退出码 3 | 未登录 / 会话过期 / 密码错 | `zentao-cli login`（密码需用户输入） |
+| 退出码 3 | 未登录 / 会话过期 / 密码错 | 已存密码则自动重登重试；否则 `zentao-cli login` |
 | 退出码 4 | 找不到资源 / 无权限 | 用 `list` 确认 ID；确认账号权限 |
 | 退出码 6 | 参数或远端拒绝 | 核对枚举取值与必填项；重跑并读 stderr |
 | `task start` 被拒 | `--left` 为 0 或缺省为 0 | 显式传 `--left >0` |

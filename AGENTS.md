@@ -25,8 +25,9 @@ infrastructure/
 
 ## 安全
 
-- 不保存密码到配置文件或会话文件。
-- Cookie/Session 文件权限为 `0o600`。
+- 密码**可选**保存到配置文件（`config set password`，明文）；不保存到会话文件。
+- 配置文件与 Cookie/Session 文件权限均为 `0o600`；`config show` 密码掩码，不打印明文。
+- 密码不进入命令行参数与日志。
 - `.env` 凭据只在开发/探索阶段临时使用，不进入仓库。
 
 ## 测试

@@ -1,6 +1,7 @@
 //! config 子命令端到端测试：path/show/set/init 在隔离配置目录下运行。
 
 use assert_cmd::Command;
+use predicates::prelude::PredicateBooleanExt;
 use tempfile::TempDir;
 
 fn zentao(home: &TempDir) -> Command {
@@ -64,10 +65,41 @@ fn config_set_and_show_roundtrip() {
 fn config_set_rejects_unknown_key() {
     let home = TempDir::new().unwrap();
     zentao(&home)
-        .args(["config", "set", "password", "x"])
+        .args(["config", "set", "foo", "x"])
         .assert()
         .code(6)
         .stderr(predicates::str::contains("不支持的配置键"));
+}
+
+#[test]
+fn config_set_password_show_masks_and_clear() {
+    let home = TempDir::new().unwrap();
+    zentao(&home)
+        .args(["config", "set", "password", "s3cret"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("****"));
+
+    // show 只输出掩码，不泄露明文
+    zentao(&home)
+        .args(["config", "show", "--format", "json"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("\"password\": \"****\""))
+        .stdout(predicates::str::contains("s3cret").not());
+
+    // 空串清除
+    zentao(&home)
+        .args(["config", "set", "password", ""])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("已清除"));
+
+    zentao(&home)
+        .args(["config", "show", "--format", "json"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("\"password\": \"\""));
 }
 
 #[test]

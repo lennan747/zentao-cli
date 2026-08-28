@@ -59,14 +59,23 @@ zentao-cli config set account <登录账号>
 
 > 服务器地址/账号属于用户敏感信息，仅写入本地配置，不要输出到公开渠道。
 
-## Step 4 — 登录 / Login（需要用户参与 / requires user）
+## Step 4 — 登录 / Login（可能需要用户参与 / may require user）
 
 ```shell
 zentao-cli login
 ```
 
-⚠️ 密码为**无回显交互输入**（`rpassword`），**AI 无法代输**。必须把终端交给用户，由用户输入密码；无 TTY 时退化为 stdin 读取。密码不落盘、不进命令行参数与日志。
-The password is read via a no-echo prompt. The AI cannot type it — hand the terminal to the user.
+两种方式，任选其一：
+
+- **推荐（免交互，适合 AI 自动重登）**：向用户索取密码后写入配置，此后 `login` 与「会话过期自动重登」都无需用户再输入：
+
+  ```shell
+  zentao-cli config set password <密码>   # 明文存 config.toml，权限 0o600，config show 掩码显示
+  zentao-cli login                        # 使用已保存密码，免输入
+  ```
+
+- **交互式**：未保存密码时，`login` 用无回显终端读取密码（`rpassword`），**AI 无法代输**——必须把终端交给用户输入；无 TTY 时退化为 stdin 读取。
+  If no password is saved, login reads it via a no-echo prompt. The AI cannot type it — hand the terminal to the user.
 
 ## Step 5 — 验证 / Verify
 
@@ -74,12 +83,12 @@ The password is read via a no-echo prompt. The AI cannot type it — hand the te
 zentao-cli project list
 ```
 
-退出码 `0` 即安装成功；`3` 表示未登录/会话过期，重新执行 Step 4。
+退出码 `0` 即安装成功。查询/写命令遇会话过期（退出码 `3`）且已保存密码时，会**自动重登并重试一次**；未保存密码则重新执行 Step 4。
 
 ## 安全须知 / Security
 
-- 不得把服务器地址、账号、任务/Bug 内容、会话信息输出到公开渠道或写入仓库提交。
-- 密码不保存到配置/会话文件；会话文件权限 `0o600`。
+- 不得把服务器地址、账号、密码、任务/Bug 内容、会话信息输出到公开渠道或写入仓库提交。
+- 密码**可选**保存到配置（明文，config.toml 权限 `0o600`，`config show` 掩码）；未保存则仅登录时交互输入。会话文件权限 `0o600`。密码不进入命令行参数与日志。
 - 写操作默认交互确认；经用户明确同意前不得使用 `--yes`。
 
 ## 退出码参考 / Exit Codes

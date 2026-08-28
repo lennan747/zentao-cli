@@ -3,13 +3,16 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-/// 单个 profile 配置。不保存密码。
+/// 单个 profile 配置。密码为可选字段：显式设置后才写入 config.toml，
+/// 未设置则保持 None（不落盘）。
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Profile {
     pub server: String,
     pub account: String,
     #[serde(default)]
     pub timeout_seconds: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub password: Option<String>,
 }
 
 /// 应用配置。
@@ -41,6 +44,13 @@ impl Config {
         let tmp = path.with_extension("tmp");
         std::fs::write(&tmp, content)?;
         std::fs::rename(&tmp, path)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perm = std::fs::metadata(path)?.permissions();
+            perm.set_mode(0o600);
+            std::fs::set_permissions(path, perm)?;
+        }
         Ok(())
     }
 
@@ -79,6 +89,7 @@ mod tests {
             server: "https://x.com".into(),
             account: "demo-user".into(),
             timeout_seconds: 60,
+            password: None,
         };
         config.profiles.insert("default".into(), profile);
 
@@ -108,5 +119,49 @@ mod tests {
             .unwrap();
         let loaded = Config::load(&path).unwrap();
         assert_eq!(loaded.profiles["default"].timeout_seconds, 0);
+    }
+
+    #[test]
+    fn password_roundtrip_and_absent_defaults_to_none() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("config.toml");
+
+        let mut config = Config {
+            default_profile: "default".to_string(),
+            profiles: std::collections::HashMap::new(),
+        };
+        let mut profile = Profile {
+            server: "https://x.com".into(),
+            account: "demo-user".into(),
+            timeout_seconds: 60,
+            password: None,
+        };
+        profile.password = Some("secret".to_string());
+        config.profiles.insert("default".into(), profile);
+
+        config.save(&path).unwrap();
+        let loaded = Config::load(&path).unwrap();
+        assert_eq!(
+            loaded.profiles["default"].password.as_deref(),
+            Some("secret")
+        );
+
+        // 旧配置无 password 字段时解析为 None
+        let legacy = dir.path().join("legacy.toml");
+        std::fs::write(&legacy, "default_profile = \"default\"\n\n[profiles.default]\nserver = \"x\"\naccount = \"a\"\n").unwrap();
+        let loaded_legacy = Config::load(&legacy).unwrap();
+        assert_eq!(loaded_legacy.profiles["default"].password, None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn save_sets_config_file_mode_0600() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("config.toml");
+        Config::default().save(&path).unwrap();
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600);
     }
 }

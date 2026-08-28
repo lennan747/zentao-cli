@@ -10,7 +10,8 @@ use std::time::Duration;
 
 use clap::{Parser, Subcommand};
 
-use crate::adapters::zentao_v9::ZentaoV9Client;
+use crate::adapters::zentao_v9::{ZentaoV9AuthGateway, ZentaoV9Client};
+use crate::application::{AuthGateway, Credentials};
 use crate::domain::{AuthError, ZentaoError};
 use crate::infrastructure::config::Config;
 use crate::infrastructure::session::StoredSession;
@@ -43,7 +44,7 @@ pub enum Commands {
     Login(login::LoginArgs),
     /// 退出登录
     Logout(logout::LogoutArgs),
-    /// 配置文件管理（server/account/timeout）
+    /// 配置文件管理（server/account/timeout/password）
     Config(config::ConfigArgs),
     /// 项目查询
     Project(project::ProjectArgs),
@@ -108,4 +109,42 @@ pub fn build_client(server: &str, timeout_seconds: u64) -> Result<ZentaoV9Client
         ZentaoV9Client::new(server)
     };
     result.map_err(|e| ZentaoError::Internal(format!("创建 HTTP 客户端失败: {e}")))
+}
+
+/// 用配置中保存的 server/account/password 静默重登，刷新会话文件。
+/// 配置缺少任一凭据时返回错误（调用方应保持原失败结果）。
+pub async fn relogin(profile: &str) -> Result<(), ZentaoError> {
+    let config_path = Config::config_path();
+    let config = Config::load(&config_path)
+        .map_err(|e| ZentaoError::Internal(format!("读取配置失败: {e}")))?;
+    let saved = config.profiles.get(profile).cloned().unwrap_or_default();
+
+    let server = saved.server.trim_end_matches('/').to_string();
+    let account = saved.account.clone();
+    let password = saved.password.clone().filter(|p| !p.is_empty());
+
+    if server.is_empty() || account.is_empty() || password.is_none() {
+        return Err(ZentaoError::Auth(AuthError::Other(
+            "会话已过期，且配置缺少 server/account/password，无法自动重登，请先执行 zentao login"
+                .into(),
+        )));
+    }
+
+    let client = build_client(&server, saved.timeout_seconds)?;
+    let gateway = ZentaoV9AuthGateway::new(client);
+    let session = gateway
+        .login(&Credentials {
+            account: account.clone(),
+            password: password.expect("password checked non-empty above"),
+        })
+        .await
+        .map_err(ZentaoError::Auth)?;
+
+    let stored = StoredSession {
+        server: session.server.clone(),
+        cookie: session.cookie,
+    };
+    stored
+        .save(StoredSession::session_path(profile))
+        .map_err(|e| ZentaoError::Internal(format!("保存会话失败: {e}")))
 }

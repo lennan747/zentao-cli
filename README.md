@@ -10,7 +10,7 @@
 
 - **只读查询**：项目、任务、Bug 的 `list` / `get`，支持状态过滤与 `--format json` 结构化输出。
 - **写操作**：任务与 Bug 的创建、编辑、指派、状态流转、评论。
-- **安全护栏**：写命令默认打印摘要并交互确认；`--dry-run` 只预览不提交；无 TTY 拒绝执行；密码不落盘、不进命令行与日志。
+- **安全护栏**：写命令默认打印摘要并交互确认；`--dry-run` 只预览不提交；无 TTY 拒绝执行；密码不进入命令行参数与日志（可选保存到配置，见「配置与凭据安全」）。
 - **友好输出**：极简表格、中文列头与字段名、语义配色、长文本折行与超长截断（详见「输出样式」）。
 - **多环境配置**：`--profile` 支持多套服务器/账号配置。
 
@@ -68,7 +68,7 @@ cargo build --release --locked
 ## 快速开始
 
 ```bash
-# 1. 登录（密码无回显输入，不进入命令行参数和日志）
+# 1. 登录（密码无回显输入，不进入命令行参数和日志；已用 config set password 保存则免输入）
 zentao-cli login --server https://zentao.example.com --account <你的账号>
 
 # 2. 查询
@@ -181,7 +181,7 @@ zentao-cli config path
 
 #### config show
 
-显示当前 profile 的配置（不含密码）。
+显示当前 profile 的配置（密码掩码显示为 `****`）。
 
 ```
 zentao-cli config show [--profile <name>]
@@ -205,11 +205,14 @@ zentao-cli config set <key> <value>
 | `server` | 禅道服务器地址（末尾 `/` 会被去掉） |
 | `account` | 登录账号 |
 | `timeout` | 请求超时秒数（非负整数，0 表示用默认 30 秒） |
+| `password` | 登录密码；明文存于 config.toml（权限 0o600），传空串清除 |
 
 ```bash
 zentao-cli config set server https://zentao.example.com
 zentao-cli config set account <你的账号>
 zentao-cli config set timeout 60
+zentao-cli config set password <你的密码>   # 保存后 login 免输入、会话过期自动重登
+zentao-cli config set password ""          # 清除已保存的密码
 ```
 
 #### config init
@@ -237,15 +240,20 @@ zentao-cli login [--server <url>] [--account <账号>]
 | `-s, --server <url>` | 否 | 禅道地址，缺省用配置文件中已保存的 |
 | `-a, --account <账号>` | 否 | 登录账号，缺省用配置文件中已保存的 |
 
-密码通过无回显终端读取，不进入命令行参数、日志或配置文件；无 TTY 时退化为 stdin 读取并给出警告。
+密码取值顺序：① 配置中已保存的密码（免输入）② 无回显终端读取。密码不进入命令行参数与日志；无 TTY 且未保存密码时退化为 stdin 读取并给出警告。
 
 ```bash
+# 已用 config set password 保存密码 → 免交互
+zentao-cli login
+
 # 交互式（密码无回显）
 zentao-cli login --server https://zentao.example.com --account <你的账号>
 
-# 脚本（密码走 stdin，会打印警告）
+# 脚本（密码走 stdin，会打印警告；未保存密码时）
 echo "$PASSWORD" | zentao-cli login --server https://zentao.example.com --account <你的账号>
 ```
+
+> 查询/写命令遇会话过期（退出码 3）且已保存密码时，会自动重登并重试一次，无需手动干预。
 
 #### logout
 
@@ -710,6 +718,7 @@ default_profile = "default"
 server = "https://zentao.example.com"
 account = "<你的账号>"
 timeout_seconds = 60
+password = "<你的密码>"
 
 # 多环境示例：额外的 profile
 [profiles.customer]
@@ -724,19 +733,22 @@ timeout_seconds = 30
 | `profiles.<name>.server` | 禅道服务器地址 |
 | `profiles.<name>.account` | 登录账号 |
 | `profiles.<name>.timeout_seconds` | 请求超时秒数；0 或不写表示用默认 30 秒 |
+| `profiles.<name>.password` | 可选登录密码（明文）；不写则不保存 |
 
 说明：
 
-- 配置文件**不保存密码**；密码只在登录时经无回显终端读取。
+- `password` 为**可选**字段：显式 `config set password` 才写入；不写则每次登录仍走无回显交互输入。
 - 可用 `zentao-cli config set ...` 管理，也可手工编辑后直接使用。
-- 多环境用 `--profile <name>` 切换；每个 profile 有独立的 `server`/`account`/`timeout_seconds`。
+- 多环境用 `--profile <name>` 切换；每个 profile 有独立的 `server`/`account`/`timeout_seconds`/`password`。
 
 ### 凭据安全
 
-- 配置只记录服务器地址、账号和超时，不保存密码。
+- 密码**可选**保存到配置：明文存于 `config.toml`，文件权限 `0o600`（仅当前用户可读写）；`config show` 掩码显示，不打印明文。
+- 不保存密码时，密码仅在登录时经无回显终端读取；无 TTY（管道/脚本）时退化为 stdin 读取并给出警告。
 - Session Cookie 单独保存为 `session-<profile>.json`，权限 `0o600`。
-- 密码仅在登录时经无回显终端读取；无 TTY（管道/脚本）时退化为 stdin 读取并给出警告。
+- 会话过期且已保存密码时，查询/写命令自动重登并重试一次；密码始终不进入命令行参数与日志。
 - 登录采用旧版表单协议：`verifyRand` + `MD5(MD5(密码)+verifyRand)`，会话只依赖 `zentaosid` Cookie。
+- 注意：明文保存密码是可用性与安全的取舍；服务器地址/账号/密码均属敏感信息，请勿把 config.toml 或会话文件提交到公开仓库或分享给他人。
 
 ## 输出字段
 
@@ -763,7 +775,7 @@ JSON 输出字段即内部稳定 DTO：
 
 ## 故障排查
 
-- `会话已过期，请重新登录`：重新执行 `login`。
+- `会话已过期，请重新登录`：重新执行 `login`；若已 `config set password`，查询/写命令会自动重登并重试。
 - `请求失败/HTTP 错误`：检查网络、服务器地址和 TLS。
 - `远端响应无法解析`：目标实例可能已升级或结构变化，需更新适配层。
 - `--verbose` 查看详细日志（日志不包含密码和 Cookie）。

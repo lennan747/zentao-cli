@@ -12,13 +12,13 @@ use crate::domain::{
     ZentaoError,
 };
 
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct TaskArgs {
     #[command(subcommand)]
     pub command: TaskCommands,
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Debug, Clone, Subcommand)]
 pub enum TaskCommands {
     /// 列出我的任务
     List(ListArgs),
@@ -44,7 +44,7 @@ pub enum TaskCommands {
     Comment(CommentArgs),
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct ListArgs {
     /// 指派对象（旧版接口仅支持 me）
     #[arg(short, long)]
@@ -54,13 +54,13 @@ pub struct ListArgs {
     pub status: Option<String>,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct GetArgs {
     /// 任务 ID
     pub id: String,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct CreateArgs {
     /// 项目 ID（任务必须归属某项目）
     pub project: String,
@@ -109,7 +109,7 @@ pub struct CreateArgs {
     pub write: WriteFlags,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct EditArgs {
     /// 任务 ID
     pub id: String,
@@ -148,7 +148,7 @@ pub struct EditArgs {
     pub write: WriteFlags,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct AssignArgs {
     /// 任务 ID
     pub id: String,
@@ -162,7 +162,7 @@ pub struct AssignArgs {
     pub write: WriteFlags,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct StartArgs {
     /// 任务 ID
     pub id: String,
@@ -186,7 +186,7 @@ pub struct StartArgs {
     pub write: WriteFlags,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct FinishArgs {
     /// 任务 ID
     pub id: String,
@@ -207,7 +207,7 @@ pub struct FinishArgs {
     pub write: WriteFlags,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct CancelArgs {
     /// 任务 ID
     pub id: String,
@@ -219,7 +219,7 @@ pub struct CancelArgs {
     pub write: WriteFlags,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct CloseArgs {
     /// 任务 ID
     pub id: String,
@@ -231,7 +231,7 @@ pub struct CloseArgs {
     pub write: WriteFlags,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct ActivateArgs {
     /// 任务 ID
     pub id: String,
@@ -243,7 +243,7 @@ pub struct ActivateArgs {
     pub write: WriteFlags,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct CommentArgs {
     /// 任务 ID
     pub id: String,
