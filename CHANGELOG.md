@@ -9,6 +9,12 @@
 ### 新增
 
 - 详情富文本图片提取：`project get` / `task get` / `bug get` 提取 `desc`/`steps` 中的 `<img>` 为绝对 URL 列表（`desc_images` / `steps_images`，无图片时省略），表格输出中图片 URL 内嵌在「描述 / 重现步骤」单元格末尾，且富文本段落换行与原页面一致（不再压成单行）。
+- Bug 详情历史记录：`bug get` 解析 `data.actions` 为 `history` 动作日志（`date`/`actor`/`action`/`comment`/`fields`），表格输出本地化为中文（`时间 操作人 动作: 字段 旧值 → 新值`）。
+- Bug 详情项目名：`BugDetail.project_name`（来自 `bug.projectName`），表格「所属项目」显示名称而非 ID。
+
+### 变更
+
+- 详情表格字段按固定顺序渲染：Bug 为 `ID → 状态 → 产品 → 所属项目 → 标题 → 重现步骤 → 创建者 → 创建日期 → 历史记录`（隐藏 指派给/优先级/所属产品/严重程度）；项目/任务按逻辑顺序统一（JSON 输出字段与顺序不受影响）。
 
 ## [0.1.1] - 2026-08-28
 

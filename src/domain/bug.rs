@@ -69,12 +69,47 @@ pub struct BugSummary {
     pub opened_by: String,
 }
 
+/// Bug 历史记录中的单条字段变更。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FieldChange {
+    /// 变更字段（英文键名，如 `assignedTo`、`status`）。
+    pub field: String,
+    /// 变更前值（可能为空）。
+    #[serde(default)]
+    pub old: String,
+    /// 变更后值（可能为空）。
+    #[serde(default)]
+    pub new: String,
+}
+
+/// Bug 历史记录中的单条动作。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HistoryEntry {
+    /// 动作发生时间（`YYYY-MM-DD HH:MM:SS`）。
+    #[serde(default)]
+    pub date: Option<String>,
+    /// 操作人账号。
+    #[serde(default)]
+    pub actor: String,
+    /// 动作英文名（`opened`/`assigned`/`resolved`/`closed` 等）。
+    #[serde(default)]
+    pub action: String,
+    /// 备注内容（可能为空）。
+    #[serde(default)]
+    pub comment: String,
+    /// 本次动作涉及的字段变更（可能为空）。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fields: Vec<FieldChange>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BugDetail {
     pub id: EntityId,
     pub product_id: EntityId,
     pub product_name: String,
     pub project_id: EntityId,
+    #[serde(default)]
+    pub project_name: String,
     pub title: String,
     pub status: BugStatus,
     pub severity: BugSeverity,
@@ -90,6 +125,9 @@ pub struct BugDetail {
     /// 重现步骤中 <img> 图片的绝对 URL 列表（无图片时省略）。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub steps_images: Vec<String>,
+    /// 历史记录（动作日志，无记录时省略）。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub history: Vec<HistoryEntry>,
 }
 
 /// 新建 Bug 草稿。

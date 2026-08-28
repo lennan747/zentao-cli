@@ -308,9 +308,11 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
             }
         }
         BugCommands::Get(get) => match gateway.get_bug(EntityId::from(get.id)).await {
-            Ok(detail) => output::print_value(&detail, ctx.format)
-                .map_err(|e| ZentaoError::Internal(e.to_string()))
-                .map_or_else(|e| fail(&e), |_| ok()),
+            Ok(detail) => {
+                output::print_value(&detail, ctx.format, Some(output::BUG_DETAIL_TABLE_FIELDS))
+                    .map_err(|e| ZentaoError::Internal(e.to_string()))
+                    .map_or_else(|e| fail(&e), |_| ok())
+            }
             Err(e) => fail(&e.into()),
         },
         BugCommands::Create(a) => {

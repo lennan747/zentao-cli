@@ -4,7 +4,7 @@ use serde_json::Value;
 use crate::application::{BugGateway, BugQuery};
 use crate::domain::{
     BugActivateParams, BugDetail, BugDraft, BugEdit, BugNoteParams, BugResolveParams, BugSeverity,
-    BugStatus, BugSummary, EntityId, Page, QueryError,
+    BugStatus, BugSummary, EntityId, FieldChange, HistoryEntry, Page, QueryError,
 };
 
 use super::client::ZentaoV9Client;
@@ -89,6 +89,7 @@ impl ZentaoV9BugGateway {
             product_id: EntityId::from(str_field(bug, "product")),
             product_name: str_field(data, "productName"),
             project_id: EntityId::from(str_field(bug, "project")),
+            project_name: str_field(bug, "projectName"),
             title: str_field(bug, "title"),
             status: enum_field::<BugStatus>(bug, "status"),
             severity: enum_field::<BugSeverity>(bug, "severity"),
@@ -98,8 +99,46 @@ impl ZentaoV9BugGateway {
             opened_date: opt_date(bug, "openedDate"),
             steps_images: super::normalize::resolve_image_urls(&raw_steps, server),
             steps: super::normalize::strip_html(&raw_steps),
+            history: history_from(data),
         })
     }
+}
+
+/// 从 `data.actions`（按动作 ID 键控的字典）解析历史记录，按动作 ID 升序（即时间序）。
+fn history_from(data: &Value) -> Vec<HistoryEntry> {
+    let Some(actions) = data.get("actions").and_then(|v| v.as_object()) else {
+        return Vec::new();
+    };
+    let mut ids: Vec<u64> = actions
+        .keys()
+        .filter_map(|key| key.parse::<u64>().ok())
+        .collect();
+    ids.sort_unstable();
+    ids.into_iter()
+        .filter_map(|id| {
+            let entry = actions.get(&id.to_string())?;
+            Some(HistoryEntry {
+                date: opt_date(entry, "date"),
+                actor: str_field(entry, "actor"),
+                action: str_field(entry, "action"),
+                comment: str_field(entry, "comment"),
+                fields: entry
+                    .get("history")
+                    .and_then(|h| h.as_array())
+                    .map(|items| {
+                        items
+                            .iter()
+                            .map(|item| FieldChange {
+                                field: str_field(item, "field"),
+                                old: str_field(item, "old"),
+                                new: str_field(item, "new"),
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+            })
+        })
+        .collect()
 }
 
 #[async_trait]

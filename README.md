@@ -557,7 +557,16 @@ zentao-cli bug list --status active
 zentao-cli bug get <id>
 ```
 
-返回字段：id、product_id、product_name、project_id、title、status、severity、priority、assigned_to、opened_by、opened_date、steps。
+返回字段：id、product_id、product_name、project_id、project_name、title、status、severity、priority、assigned_to、opened_by、opened_date、steps、steps_images、history。
+
+表格输出按以下顺序只显示这些字段（隐藏 指派给/优先级/所属产品/严重程度）：
+
+```
+ID → 状态 → 产品 → 所属项目 → 标题 → 重现步骤 → 创建者 → 创建日期 → 历史记录
+```
+
+- 「所属项目」显示项目名称（`project_name`，来自 `bug.projectName`）。
+- 「历史记录」为动作日志：每行 `时间 操作人 动作`，含字段变更时追加 `: 字段 旧值 → 新值`（如 `指派给 zhangdahu → zhanglinan`）；无历史记录时省略该行。
 
 ```bash
 zentao-cli bug get 2001
@@ -770,9 +779,12 @@ JSON 输出字段即内部稳定 DTO：
 - `TaskSummary`：`id`、`project_id`、`project_name`、`name`、`status`、`priority`、`assigned_to`、`deadline`
 - `TaskDetail`：+ `desc`、`opened_by`、`opened_date`、`estimate`、`consumed`、`left`
 - `BugSummary`：`id`、`product_id`、`project_id`、`title`、`status`、`severity`、`priority`、`assigned_to`、`opened_by`
-- `BugDetail`：+ `product_name`、`steps`
+- `BugDetail`：+ `product_name`、`project_name`、`steps`、`steps_images`、`history`
+  - `history` 为动作日志数组，每条含 `date`、`actor`、`action`（英文动作名）、`comment`、`fields`（`field`/`old`/`new` 字段变更，空时省略）；无历史记录时省略该字段。
 
 富文本字段（`desc` / `steps`）中的 `<img>` 图片会额外提取为绝对 URL 列表：项目/任务为 `desc_images`，Bug 为 `steps_images`（无图片时字段省略）。表格输出中图片 URL 直接内嵌在「描述 / 重现步骤」单元格末尾（每个 URL 一行，保持段落换行，与禅道页面一致），可直接复制或点击打开；JSON 输出保持结构化字段。
+
+详情表格（`project get` / `task get` / `bug get`）字段按固定顺序渲染：项目/任务按 `ID → 名称/编号 → 状态 → 所属项目 → 优先级 → 工时 → 描述 → 创建者/日期` 等逻辑顺序，Bug 按 `ID → 状态 → 产品 → 所属项目 → 标题 → 重现步骤 → 创建者 → 创建日期 → 历史记录`（详见各命令说明）；JSON 输出字段顺序不受表格顺序影响。
 
 列表输出为 `Page` 结构：`items`、`total`、`page`、`per_page`、`total_pages`。
 

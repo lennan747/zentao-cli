@@ -233,7 +233,15 @@ fn field_label(key: &str) -> &str {
         "resolution" => "解决方案",
         "resolvedBuild" => "解决版本",
         "buildName" => "版本名称",
+        "resolvedDate" => "解决日期",
+        "resolvedBy" => "解决者",
+        "closedDate" => "关闭日期",
+        "closedBy" => "关闭者",
+        "confirmed" => "确认",
+        "assignedDate" => "指派日期",
+        "activatedDate" => "激活日期",
         "consumed（基线）" => "消耗工时（基线）",
+        "history" => "历史记录",
         _ => key,
     }
 }
@@ -284,7 +292,14 @@ pub fn render_summary(title: &str, items: &[(&str, &str)]) -> String {
 /// 将单个可序列化值按指定格式输出到 stdout。
 ///
 /// table 格式输出字段/值两列表；json 格式输出合法 JSON（FORMAT-001）。
-pub fn print_value<T: Serialize>(value: &T, format: OutputFormat) -> anyhow::Result<()> {
+/// `table_fields` 为 `Some` 时按给定键/标签清单逐行渲染（仅显示清单字段，
+/// 标签可覆盖 `field_label` 默认映射）；为 `None` 时按 `key_display_order`
+/// 排序渲染全部字段。
+pub fn print_value<T: Serialize>(
+    value: &T,
+    format: OutputFormat,
+    table_fields: Option<&[(&str, &str)]>,
+) -> anyhow::Result<()> {
     match format {
         OutputFormat::Json => {
             println!("{}", serde_json::to_string_pretty(value)?);
@@ -294,16 +309,30 @@ pub fn print_value<T: Serialize>(value: &T, format: OutputFormat) -> anyhow::Res
             if let Value::Object(map) = value {
                 let mut table = new_table();
                 table.set_header(header_row(&["字段", "值"]));
-                for (key, val) in &map {
+                let ordered: Vec<(String, Option<String>)> = match table_fields {
+                    Some(fields) => fields
+                        .iter()
+                        .map(|(k, l)| (k.to_string(), Some(l.to_string())))
+                        .collect(),
+                    None => {
+                        let mut keys: Vec<String> = map.keys().cloned().collect();
+                        keys.sort_by_key(|k| key_display_order(k));
+                        keys.into_iter().map(|k| (k, None)).collect()
+                    }
+                };
+                for (key, label_override) in ordered {
                     if key.ends_with("_images") {
                         // 图片 URL 并入对应富文本字段（steps/desc）单元格，不单独成行
                         continue;
                     }
+                    let Some(val) = map.get(&key) else {
+                        continue;
+                    };
                     let raw = clean_display(&value_cell(val));
-                    let mut cell_value = if key == "status" {
-                        status_value_label(&raw).unwrap_or(&raw).to_string()
-                    } else {
-                        raw
+                    let mut cell_value = match key.as_str() {
+                        "status" => status_value_label(&raw).unwrap_or(&raw).to_string(),
+                        "history" => history_cell(val),
+                        _ => raw,
                     };
                     // 富文本内嵌图片：URL 追加为该单元格的独立行（与禅道页面一致）
                     let images_key = format!("{key}_images");
@@ -316,8 +345,11 @@ pub fn print_value<T: Serialize>(value: &T, format: OutputFormat) -> anyhow::Res
                             }
                         }
                     }
+                    let label = label_override
+                        .as_deref()
+                        .unwrap_or_else(|| field_label(&key));
                     table.add_row([
-                        plain(field_label(key)),
+                        plain(label),
                         plain(wrap_value(&cell_value, MAX_VALUE_WIDTH)),
                     ]);
                 }
@@ -328,6 +360,157 @@ pub fn print_value<T: Serialize>(value: &T, format: OutputFormat) -> anyhow::Res
         }
     }
     Ok(())
+}
+
+/// Bug 详情表格的字段清单、顺序与标签（白名单，隐藏 指派给/优先级/所属产品/严重程度）。
+pub const BUG_DETAIL_TABLE_FIELDS: &[(&str, &str)] = &[
+    ("id", "ID"),
+    ("status", "状态"),
+    ("product_name", "产品"),
+    ("project_name", "所属项目"),
+    ("title", "标题"),
+    ("steps", "重现步骤"),
+    ("opened_by", "创建者"),
+    ("opened_date", "创建日期"),
+    ("history", "历史记录"),
+];
+
+/// 详情表格默认字段顺序（`table_fields` 为 None 时使用）。
+///
+/// 返回序号越小越靠前；未列出的键排最后（保持稳定排序，即字母序）。
+fn key_display_order(key: &str) -> usize {
+    const ORDER: &[&str] = &[
+        "id",
+        "name",
+        "code",
+        "title",
+        "status",
+        "product_id",
+        "product_name",
+        "project_id",
+        "project_name",
+        "severity",
+        "priority",
+        "pri",
+        "assigned_to",
+        "estimate",
+        "consumed",
+        "left",
+        "deadline",
+        "desc",
+        "steps",
+        "opened_by",
+        "opened_date",
+        "pm",
+        "begin",
+        "end",
+        "history",
+    ];
+    ORDER
+        .iter()
+        .position(|k| *k == key)
+        .map(|i| i + 1)
+        .unwrap_or(usize::MAX)
+}
+
+/// 把动作英文名映射为中文标签；未知动作原样返回。
+fn action_label(action: &str) -> &str {
+    match action {
+        "opened" => "创建",
+        "assigned" => "指派给",
+        "edited" => "编辑",
+        "commented" => "备注",
+        "resolved" => "解决",
+        "closed" => "关闭",
+        "activated" => "激活",
+        "confirmed" => "确认",
+        "reopened" => "重新激活",
+        "started" => "开始",
+        "finished" => "完成",
+        "canceled" | "cancelled" => "取消",
+        "deleted" => "删除",
+        "moved" => "移动",
+        "restarted" => "重启",
+        _ => action,
+    }
+}
+
+/// 把历史记录 JSON 数组渲染为多行文本，每个动作/字段变更一行。
+fn history_cell(value: &Value) -> String {
+    let Value::Array(entries) = value else {
+        return value_cell(value);
+    };
+    let mut lines: Vec<String> = Vec::new();
+    for entry in entries {
+        let date = entry.get("date").and_then(|v| v.as_str()).unwrap_or("");
+        let actor = entry.get("actor").and_then(|v| v.as_str()).unwrap_or("");
+        let action = entry.get("action").and_then(|v| v.as_str()).unwrap_or("");
+        let comment = entry.get("comment").and_then(|v| v.as_str()).unwrap_or("");
+
+        let mut prefix = String::new();
+        if !date.is_empty() {
+            prefix.push_str(date);
+            prefix.push(' ');
+        }
+        if !actor.is_empty() {
+            prefix.push_str(actor);
+            prefix.push(' ');
+        }
+        prefix.push_str(action_label(action));
+
+        let changes = entry.get("fields").and_then(|v| v.as_array());
+        if action == "commented" {
+            // 备注动作：正文即备注文本
+            let mut line = prefix;
+            if !comment.is_empty() {
+                line.push_str(": ");
+                line.push_str(&clean_display(comment));
+            }
+            lines.push(line);
+            continue;
+        }
+        match changes {
+            Some(items) if !items.is_empty() => {
+                for item in items {
+                    let field = item.get("field").and_then(|v| v.as_str()).unwrap_or("");
+                    let old = item.get("old").and_then(|v| v.as_str()).unwrap_or("");
+                    let new = item.get("new").and_then(|v| v.as_str()).unwrap_or("");
+                    let mut line = prefix.clone();
+                    line.push_str(": ");
+                    line.push_str(field_label(field));
+                    if old.is_empty() {
+                        line.push_str(" = ");
+                        line.push_str(&clean_display(new));
+                    } else if new.is_empty() {
+                        line.push_str(" 清除 ");
+                        line.push_str(&clean_display(old));
+                    } else {
+                        line.push(' ');
+                        line.push_str(&clean_display(old));
+                        line.push_str(" → ");
+                        line.push_str(&clean_display(new));
+                    }
+                    lines.push(line);
+                }
+                if is_note(comment) {
+                    lines.push(format!("{prefix} 备注: {}", clean_display(comment)));
+                }
+            }
+            _ => {
+                if is_note(comment) {
+                    lines.push(format!("{prefix} 备注: {}", clean_display(comment)));
+                } else {
+                    lines.push(prefix);
+                }
+            }
+        }
+    }
+    lines.join("\n")
+}
+
+/// 备注文本是否有效（非空且不是纯数字——旧版把备注编号也放在 `comment` 字段里）。
+fn is_note(text: &str) -> bool {
+    !text.trim().is_empty() && !text.trim().chars().all(|c| c.is_ascii_digit())
 }
 
 fn value_cell(value: &Value) -> String {

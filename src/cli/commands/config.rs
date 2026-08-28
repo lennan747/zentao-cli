@@ -82,7 +82,7 @@ pub async fn handle(args: ConfigArgs, ctx: &CommandContext) -> ExitCode {
                     .unwrap_or("")
                     .to_string(),
             };
-            match output::print_value(&view, ctx.format) {
+            match output::print_value(&view, ctx.format, None) {
                 Ok(()) => ok(),
                 Err(e) => fail(&ZentaoError::Internal(e.to_string())),
             }

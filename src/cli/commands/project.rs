@@ -57,7 +57,7 @@ pub async fn handle(args: ProjectArgs, ctx: &CommandContext) -> ExitCode {
             }
         }
         ProjectCommands::Get(get) => match gateway.get_project(EntityId::from(get.id)).await {
-            Ok(detail) => output::print_value(&detail, ctx.format)
+            Ok(detail) => output::print_value(&detail, ctx.format, None)
                 .map_err(|e| ZentaoError::Internal(e.to_string())),
             Err(e) => Err(e.into()),
         },

@@ -344,7 +344,12 @@ async fn bug_get_returns_detail() {
 
     assert_eq!(detail.title, "示例Bug-界面调整");
     assert_eq!(detail.product_name, "示例产品");
+    assert_eq!(detail.project_name, "示例项目");
     assert_eq!(detail.steps, "示例重现步骤");
+    assert_eq!(detail.history.len(), 2);
+    assert_eq!(detail.history[0].action, "opened");
+    assert_eq!(detail.history[1].fields[0].field, "assignedTo");
+    assert_eq!(detail.history[1].fields[0].new, "example-user");
 }
 
 #[tokio::test]

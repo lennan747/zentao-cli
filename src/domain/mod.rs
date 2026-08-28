@@ -6,7 +6,7 @@ pub mod task;
 #[allow(unused_imports)]
 pub use bug::{
     BugActivateParams, BugDetail, BugDraft, BugEdit, BugNoteParams, BugResolveParams, BugSeverity,
-    BugStatus, BugSummary,
+    BugStatus, BugSummary, FieldChange, HistoryEntry,
 };
 pub use error::{AuthError, QueryError, ZentaoError};
 #[allow(unused_imports)]

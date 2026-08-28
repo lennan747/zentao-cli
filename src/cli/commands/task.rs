@@ -302,7 +302,7 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
             }
         }
         TaskCommands::Get(get) => match gateway.get_task(EntityId::from(get.id)).await {
-            Ok(detail) => output::print_value(&detail, ctx.format)
+            Ok(detail) => output::print_value(&detail, ctx.format, None)
                 .map_err(|e| ZentaoError::Internal(e.to_string()))
                 .map_or_else(|e| fail(&e), |_| ok()),
             Err(e) => fail(&e.into()),

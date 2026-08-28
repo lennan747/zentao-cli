@@ -22,6 +22,17 @@ fn zentao(home: &TempDir) -> Command {
     cmd
 }
 
+fn labels_in_order(output: &str, labels: &[&str]) -> bool {
+    let mut pos = 0usize;
+    for label in labels {
+        match output[pos..].find(label) {
+            Some(offset) => pos += offset + label.len(),
+            None => return false,
+        }
+    }
+    true
+}
+
 async fn mount_login_flow(server: &MockServer, probe_body: String) {
     Mock::given(method("GET"))
         .and(path("/user-login-Lw==.html"))
@@ -185,7 +196,7 @@ async fn task_and_bug_commands_work() {
 async fn bug_get_shows_steps_images() {
     let server = MockServer::start().await;
     mount_login_flow(&server, fixture("task-list.json")).await;
-    let data = r#"{"status":"success","data":"{\"title\":\"t\",\"productName\":\"示例产品\",\"bug\":{\"id\":\"41824\",\"title\":\"带图Bug\",\"status\":\"active\",\"severity\":\"3\",\"pri\":\"3\",\"steps\":\"<p>步骤1</p><p><img src=\\\"data/upload/a.png\\\"></p>\"}}"}"#.to_string();
+    let data = r#"{"status":"success","data":"{\"title\":\"t\",\"productName\":\"示例产品\",\"bug\":{\"id\":\"41824\",\"projectName\":\"示例项目\",\"title\":\"带图Bug\",\"status\":\"active\",\"severity\":\"3\",\"pri\":\"3\",\"steps\":\"<p>步骤1</p><p><img src=\\\"data/upload/a.png\\\"></p>\"},\"actions\":{\"9001\":{\"id\":\"9001\",\"action\":\"opened\",\"actor\":\"admin\",\"date\":\"2026-07-13 10:00:00\",\"comment\":\"\",\"history\":[]}}}"}"#.to_string();
     Mock::given(method("GET"))
         .and(path("/bug-view-41824.json"))
         .respond_with(ResponseTemplate::new(200).set_body_string(data))
@@ -207,22 +218,57 @@ async fn bug_get_shows_steps_images() {
 
     let expected_url = format!("{}/data/upload/a.png", server.uri());
 
-    // JSON 模式：steps_images 绝对 URL 数组
+    // JSON 模式：steps_images 绝对 URL 数组 + project_name + history
     zentao(&home)
         .args(["bug", "get", "41824", "--format", "json"])
         .assert()
         .success()
         .stdout(predicates::str::contains("steps_images"))
-        .stdout(predicates::str::contains(&expected_url));
+        .stdout(predicates::str::contains(&expected_url))
+        .stdout(predicates::str::contains("\"project_name\": \"示例项目\""))
+        .stdout(predicates::str::contains("\"history\""))
+        .stdout(predicates::str::contains("\"action\": \"opened\""));
 
-    // table 模式：图片 URL 并入「重现步骤」单元格，不再有独立「重现步骤图片」行
+    // table 模式：按清单顺序只显示 9 字段；图片 URL 并入「重现步骤」单元格；
+    // 不显示 指派给/优先级/所属产品/严重程度，也不显示独立的「重现步骤图片」行
     zentao(&home)
         .args(["bug", "get", "41824"])
         .assert()
         .success()
-        .stdout(predicates::str::contains("重现步骤"))
+        .stdout(predicates::str::contains("ID"))
+        .stdout(predicates::str::contains("所属项目"))
+        .stdout(predicates::str::contains("历史记录"))
         .stdout(predicates::str::contains(&expected_url))
-        .stdout(predicates::str::contains("重现步骤图片").not());
+        .stdout(predicates::str::contains("重现步骤图片").not())
+        .stdout(predicates::str::contains("指派给").not())
+        .stdout(predicates::str::contains("所属产品").not())
+        .stdout(predicates::str::contains("严重程度").not())
+        .stdout(predicates::str::contains("优先级").not());
+
+    // 表格字段顺序：ID → 状态 → 产品 → 所属项目 → 标题 → 重现步骤 → 创建者 → 创建日期 → 历史记录
+    let out = zentao(&home)
+        .args(["bug", "get", "41824"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        labels_in_order(
+            &stdout,
+            &[
+                "ID",
+                "状态",
+                "产品",
+                "所属项目",
+                "标题",
+                "重现步骤",
+                "创建者",
+                "创建日期",
+                "历史记录"
+            ]
+        ),
+        "bug get 表格字段顺序不符：\n{stdout}"
+    );
 }
 
 #[tokio::test]

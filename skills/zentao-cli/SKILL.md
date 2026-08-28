@@ -113,6 +113,7 @@ zentao-cli bug comment <id> <内容>
   ```
 - `get` 的 JSON 是对象详情本体（字段随实体而异，直接按返回字段读）。
 - 富文本字段（任务/项目 `desc`、Bug `steps`）内嵌图片会额外提取为绝对 URL 数组：`desc_images` / `steps_images`（无图片时省略）。需要看图片时可把 URL 转给用户或用工具打开；表格输出中 URL 内嵌在对应字段单元格末尾。
+- Bug 详情含 `project_name`（所属项目名）与 `history`（动作日志数组：`date`/`actor`/`action`/`comment`/`fields[{field,old,new}]`，无历史时省略）；`action` 为英文（opened/assigned/resolved/closed…）。需要展示历史时用 `bug get` 表格输出（已本地化为中文，格式 `时间 操作人 动作: 字段 旧值 → 新值`）。
 - 需要结构化判断时（如“是否存在某任务”），读 `total` 或遍历 `items`，不要解析 `table` 输出。
 
 ### 写操作（铁律，按顺序）
