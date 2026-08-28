@@ -210,8 +210,6 @@ fn field_label(key: &str) -> &str {
         "module" => "模块",
         "comment" => "备注",
         "steps" => "重现步骤",
-        "steps_images" => "重现步骤图片",
-        "desc_images" => "描述图片",
         "keywords" => "关键词",
         "os" => "操作系统",
         "browser" => "浏览器",
@@ -296,35 +294,30 @@ pub fn print_value<T: Serialize>(value: &T, format: OutputFormat) -> anyhow::Res
             if let Value::Object(map) = value {
                 let mut table = new_table();
                 table.set_header(header_row(&["字段", "值"]));
-                for (key, val) in map {
+                for (key, val) in &map {
                     if key.ends_with("_images") {
-                        // 图片 URL 列表：每行一张，可直接复制/点击
-                        if let Value::Array(items) = &val {
-                            let urls: Vec<&str> = items.iter().filter_map(|x| x.as_str()).collect();
-                            if urls.is_empty() {
-                                continue;
-                            }
-                            let joined = urls
-                                .iter()
-                                .enumerate()
-                                .map(|(i, u)| format!("{}. {u}", i + 1))
-                                .collect::<Vec<_>>()
-                                .join("\n");
-                            table.add_row([
-                                plain(field_label(&key)),
-                                plain(wrap_value(&joined, MAX_VALUE_WIDTH)),
-                            ]);
-                        }
+                        // 图片 URL 并入对应富文本字段（steps/desc）单元格，不单独成行
                         continue;
                     }
-                    let raw = clean_display(&value_cell(&val));
-                    let cell_value = if key == "status" {
+                    let raw = clean_display(&value_cell(val));
+                    let mut cell_value = if key == "status" {
                         status_value_label(&raw).unwrap_or(&raw).to_string()
                     } else {
                         raw
                     };
+                    // 富文本内嵌图片：URL 追加为该单元格的独立行（与禅道页面一致）
+                    let images_key = format!("{key}_images");
+                    if let Some(Value::Array(items)) = map.get(&images_key) {
+                        let urls: Vec<&str> = items.iter().filter_map(|x| x.as_str()).collect();
+                        if !urls.is_empty() {
+                            for u in urls {
+                                cell_value.push('\n');
+                                cell_value.push_str(u);
+                            }
+                        }
+                    }
                     table.add_row([
-                        plain(field_label(&key)),
+                        plain(field_label(key)),
                         plain(wrap_value(&cell_value, MAX_VALUE_WIDTH)),
                     ]);
                 }

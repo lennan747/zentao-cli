@@ -772,7 +772,7 @@ JSON 输出字段即内部稳定 DTO：
 - `BugSummary`：`id`、`product_id`、`project_id`、`title`、`status`、`severity`、`priority`、`assigned_to`、`opened_by`
 - `BugDetail`：+ `product_name`、`steps`
 
-富文本字段（`desc` / `steps`）中的 `<img>` 图片会额外提取为绝对 URL 列表：项目/任务为 `desc_images`，Bug 为 `steps_images`（无图片时字段省略）。表格输出中显示为「描述图片 / 重现步骤图片」行，每张图片一行 URL，可直接复制或点击打开。
+富文本字段（`desc` / `steps`）中的 `<img>` 图片会额外提取为绝对 URL 列表：项目/任务为 `desc_images`，Bug 为 `steps_images`（无图片时字段省略）。表格输出中图片 URL 直接内嵌在「描述 / 重现步骤」单元格末尾（每个 URL 一行，保持段落换行，与禅道页面一致），可直接复制或点击打开；JSON 输出保持结构化字段。
 
 列表输出为 `Page` 结构：`items`、`total`、`page`、`per_page`、`total_pages`。
 

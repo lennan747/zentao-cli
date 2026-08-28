@@ -8,7 +8,7 @@
 
 ### 新增
 
-- 详情富文本图片提取：`project get` / `task get` / `bug get` 会提取 `desc`/`steps` 中的 `<img>` 为绝对 URL 列表（`desc_images` / `steps_images`，无图片时省略），表格输出显示「描述图片 / 重现步骤图片」行。
+- 详情富文本图片提取：`project get` / `task get` / `bug get` 提取 `desc`/`steps` 中的 `<img>` 为绝对 URL 列表（`desc_images` / `steps_images`，无图片时省略），表格输出中图片 URL 内嵌在「描述 / 重现步骤」单元格末尾，且富文本段落换行与原页面一致（不再压成单行）。
 
 ## [0.1.1] - 2026-08-28
 

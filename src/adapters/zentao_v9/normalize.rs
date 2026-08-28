@@ -43,17 +43,62 @@ pub fn enum_field<T: DeserializeOwned + Default>(v: &Value, key: &str) -> T {
 }
 
 /// 去除 HTML 标签并解码常见实体，用于描述/重现步骤等富文本字段。
+///
+/// 块级标签（`<p>`/`<div>`/`<br>`/`<li>`/`<tr>` 等）转为换行，inline 标签剔除；
+/// 逐行压缩空白、去空行，保持与原页面一致的段落结构。
 pub fn strip_html(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
-    let mut in_tag = false;
-    for ch in input.chars() {
-        match ch {
-            '<' => in_tag = true,
-            '>' => in_tag = false,
-            c if !in_tag => out.push(c),
-            _ => {}
+    let mut rest = input;
+    while let Some(lt) = rest.find('<') {
+        out.push_str(&rest[..lt]);
+        rest = &rest[lt + 1..];
+        match rest.find('>') {
+            Some(end) => {
+                let tag = rest[..end]
+                    .trim_start_matches('/')
+                    .trim()
+                    .to_ascii_lowercase();
+                let name = tag
+                    .split(|c: char| c.is_ascii_whitespace() || c == '/')
+                    .next()
+                    .unwrap_or("");
+                // 块级/换行标签产生换行；inline 标签不产生
+                const BLOCK_TAGS: &[&str] = &[
+                    "p",
+                    "div",
+                    "br",
+                    "li",
+                    "tr",
+                    "td",
+                    "th",
+                    "table",
+                    "section",
+                    "pre",
+                    "h1",
+                    "h2",
+                    "h3",
+                    "h4",
+                    "h5",
+                    "h6",
+                    "ul",
+                    "ol",
+                    "blockquote",
+                    "hr",
+                ];
+                if BLOCK_TAGS.contains(&name) && !out.ends_with('\n') {
+                    out.push('\n');
+                }
+                rest = &rest[end + 1..];
+            }
+            None => {
+                // 无闭合 '>' 的杂散 '<' 按文本处理；此后不再有完整标签
+                out.push('<');
+                out.push_str(rest);
+                rest = "";
+            }
         }
     }
+    out.push_str(rest);
     for (entity, decoded) in [
         ("&nbsp;", " "),
         ("&amp;", "&"),
@@ -64,7 +109,11 @@ pub fn strip_html(input: &str) -> String {
     ] {
         out = out.replace(entity, decoded);
     }
-    out.split_whitespace().collect::<Vec<_>>().join(" ")
+    out.lines()
+        .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// 解码富文本中常见的 HTML 实体（用于 <img> src 属性值）。
@@ -188,6 +237,20 @@ mod tests {
     fn strips_tags_and_entities() {
         let v = json!({"desc": "<p>hello&nbsp;&amp;&nbsp;world</p>"});
         assert_eq!(strip_html(&str_field(&v, "desc")), "hello & world");
+    }
+
+    #[test]
+    fn strip_html_preserves_paragraph_and_br_breaks() {
+        assert_eq!(
+            strip_html("<p>[步骤]</p><p>[结果]</p><p>[期望]</p>"),
+            "[步骤]\n[结果]\n[期望]"
+        );
+        assert_eq!(strip_html("<p>a<br>b<br/>c</p>"), "a\nb\nc");
+        assert_eq!(strip_html("<div>a</div>\n<div>b</div>"), "a\nb");
+        // inline 标签不产生换行
+        assert_eq!(strip_html("<p>a <b>bold</b> c</p>"), "a bold c");
+        // 多行中每行内部空白压缩、去空行
+        assert_eq!(strip_html("<p>  a  </p>\n\n<p></p><p>b</p>"), "a\nb");
     }
 
     #[test]

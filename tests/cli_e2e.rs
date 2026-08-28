@@ -215,13 +215,14 @@ async fn bug_get_shows_steps_images() {
         .stdout(predicates::str::contains("steps_images"))
         .stdout(predicates::str::contains(&expected_url));
 
-    // table 模式：重现步骤图片行 + URL
+    // table 模式：图片 URL 并入「重现步骤」单元格，不再有独立「重现步骤图片」行
     zentao(&home)
         .args(["bug", "get", "41824"])
         .assert()
         .success()
-        .stdout(predicates::str::contains("重现步骤图片"))
-        .stdout(predicates::str::contains(&expected_url));
+        .stdout(predicates::str::contains("重现步骤"))
+        .stdout(predicates::str::contains(&expected_url))
+        .stdout(predicates::str::contains("重现步骤图片").not());
 }
 
 #[tokio::test]
