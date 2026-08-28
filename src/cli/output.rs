@@ -300,8 +300,7 @@ pub fn print_value<T: Serialize>(value: &T, format: OutputFormat) -> anyhow::Res
                     if key.ends_with("_images") {
                         // 图片 URL 列表：每行一张，可直接复制/点击
                         if let Value::Array(items) = &val {
-                            let urls: Vec<&str> =
-                                items.iter().filter_map(|x| x.as_str()).collect();
+                            let urls: Vec<&str> = items.iter().filter_map(|x| x.as_str()).collect();
                             if urls.is_empty() {
                                 continue;
                             }

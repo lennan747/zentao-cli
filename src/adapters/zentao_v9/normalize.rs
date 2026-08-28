@@ -209,7 +209,10 @@ mod tests {
     #[test]
     fn extract_image_urls_finds_img_src() {
         let html = r#"<p>步骤1</p><p><img src="data/upload/2026/08/abc.png" alt="" /></p>"#;
-        assert_eq!(extract_image_urls(html), vec!["data/upload/2026/08/abc.png"]);
+        assert_eq!(
+            extract_image_urls(html),
+            vec!["data/upload/2026/08/abc.png"]
+        );
     }
 
     #[test]
@@ -241,14 +244,26 @@ mod tests {
             resolve_image_url("https://cdn.x.com/a.png", server),
             "https://cdn.x.com/a.png"
         );
-        assert_eq!(resolve_image_url("data:image/png;base64,AAA", server), "data:image/png;base64,AAA");
+        assert_eq!(
+            resolve_image_url("data:image/png;base64,AAA", server),
+            "data:image/png;base64,AAA"
+        );
         assert_eq!(
             resolve_image_url("//cdn.x.com/a.png", server),
             "https://cdn.x.com/a.png"
         );
-        assert_eq!(resolve_image_url("/data/upload/a.png", server), "https://zentao.example.com/data/upload/a.png");
-        assert_eq!(resolve_image_url("data/upload/a.png", server), "https://zentao.example.com/data/upload/a.png");
+        assert_eq!(
+            resolve_image_url("/data/upload/a.png", server),
+            "https://zentao.example.com/data/upload/a.png"
+        );
+        assert_eq!(
+            resolve_image_url("data/upload/a.png", server),
+            "https://zentao.example.com/data/upload/a.png"
+        );
         // server 末尾带 / 也不重复
-        assert_eq!(resolve_image_url("/a.png", "https://x.com/"), "https://x.com/a.png");
+        assert_eq!(
+            resolve_image_url("/a.png", "https://x.com/"),
+            "https://x.com/a.png"
+        );
     }
 }

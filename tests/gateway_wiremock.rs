@@ -350,7 +350,9 @@ async fn bug_get_returns_detail() {
 #[tokio::test]
 async fn bug_get_extracts_steps_images() {
     let server = MockServer::start().await;
-    let data = wrap(r#"{"title":"t","productName":"示例产品","bug":{"id":"41824","title":"带图Bug","status":"active","severity":"3","pri":"3","steps":"<p>步骤1</p><p><img src=\"data/upload/2026/08/a.png\" alt=\"\" /></p><p><img src='https://cdn.x.com/b.png'></p>"}}"#);
+    let data = wrap(
+        r#"{"title":"t","productName":"示例产品","bug":{"id":"41824","title":"带图Bug","status":"active","severity":"3","pri":"3","steps":"<p>步骤1</p><p><img src=\"data/upload/2026/08/a.png\" alt=\"\" /></p><p><img src='https://cdn.x.com/b.png'></p>"}}"#,
+    );
     let _mock = mount(&server, "GET", "/bug-view-41824.json", data).await;
 
     let client = ZentaoV9Client::new(server.uri()).unwrap();
@@ -373,7 +375,9 @@ async fn bug_get_extracts_steps_images() {
 #[tokio::test]
 async fn task_get_extracts_desc_images() {
     let server = MockServer::start().await;
-    let data = wrap(r#"{"task":{"id":"1001","project":"7","name":"带图任务","status":"doing","pri":"2","desc":"<p>说明</p><img src=\"/data/upload/x.jpg\"/>","openedBy":"u","estimate":"1","consumed":"0","left":"1"}}"#);
+    let data = wrap(
+        r#"{"task":{"id":"1001","project":"7","name":"带图任务","status":"doing","pri":"2","desc":"<p>说明</p><img src=\"/data/upload/x.jpg\"/>","openedBy":"u","estimate":"1","consumed":"0","left":"1"}}"#,
+    );
     let _mock = mount(&server, "GET", "/task-view-1001.json", data).await;
 
     let client = ZentaoV9Client::new(server.uri()).unwrap();
@@ -393,7 +397,9 @@ async fn task_get_extracts_desc_images() {
 #[tokio::test]
 async fn project_get_extracts_desc_images() {
     let server = MockServer::start().await;
-    let data = wrap(r#"{"project":{"id":"101","code":"P","name":"带图项目","status":"doing","desc":"<p>项目说明</p><p><img src=\"data/upload/p.png\"/></p>","PM":"pm1","begin":"2026-01-01","end":"0000-00-00"}}"#);
+    let data = wrap(
+        r#"{"project":{"id":"101","code":"P","name":"带图项目","status":"doing","desc":"<p>项目说明</p><p><img src=\"data/upload/p.png\"/></p>","PM":"pm1","begin":"2026-01-01","end":"0000-00-00"}}"#,
+    );
     let _mock = mount(&server, "GET", "/project-view-101.json", data).await;
 
     let client = ZentaoV9Client::new(server.uri()).unwrap();
