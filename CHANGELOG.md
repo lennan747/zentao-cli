@@ -6,6 +6,20 @@
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-08-28
+
+### 新增
+
+- 一键安装支持 Windows：`install.ps1`（PowerShell 5.1+，x86_64），`irm ... | iex` 一行安装到 `%LOCALAPPDATA%\zentao-cli\bin` 并自动加入用户 PATH；强制 SHA256 校验。
+- 配置可选保存密码（`config set password`，明文存 config.toml，权限 0o600，`config show` 掩码）；`login` 已存密码时免交互。
+- 会话过期自动恢复：`project/task/bug` 遇退出码 3 且已保存密码时自动重登并重试一次。
+- 面向 AI Agent 的安装指南 `docs/install-guide.md`（双语）与 README 一句话安装。
+
+### 修复
+
+- 发布资产 `SHA256SUMS` 现包含全部平台三行（修复多 job 同名上传互相覆盖，仅余一行的问题）；install.sh 在 macOS 的校验因此恢复正常。
+- install.sh 在 macOS Intel 上提前明确报错（未提供该架构预编译二进制）。
+
 ## [0.1.0] - 2026-08-28
 
 ### 新增
@@ -19,5 +33,6 @@
 - CI 与发布：GitHub Actions 门禁 + tag 触发发布多平台二进制与 `SHA256SUMS`。
 - 一键安装：`install.sh`（下载 + SHA256 校验 + 安装到 `~/.local/bin`）。
 
-[Unreleased]: https://github.com/lennan747/zentao-cli/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/lennan747/zentao-cli/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/lennan747/zentao-cli/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/lennan747/zentao-cli/releases/tag/v0.1.0

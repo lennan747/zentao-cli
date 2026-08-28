@@ -9,9 +9,14 @@ description: 通过 zentao-cli 命令行操作禅道（禅道v9.0.3 旧版 .json
 
 ## 一、前置检查（开始前必须做）
 
-1. **确认已安装**：`command -v zentao-cli`；未安装则告知用户用一键安装：
+1. **确认已安装**：`command -v zentao-cli`（Windows 为 `Get-Command zentao-cli`）；未安装则告知用户用一键安装：
    ```bash
+   # Linux / macOS
    curl -fsSL https://raw.githubusercontent.com/lennan747/zentao-cli/master/install.sh | sh
+   ```
+   ```powershell
+   # Windows（PowerShell 5.1+，x86_64；装到 %LOCALAPPDATA%\zentao-cli\bin，新终端生效）
+   irm https://raw.githubusercontent.com/lennan747/zentao-cli/master/install.ps1 | iex
    ```
 2. **确认已配置**：`zentao-cli config show` 看 `server`/`account` 是否已填。
    - 未配置 → `zentao-cli config set server <服务器地址>`、`zentao-cli config set account <账号>`

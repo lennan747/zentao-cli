@@ -61,18 +61,11 @@ jobs:
           ARCHIVE="zentao-cli-${{ matrix.target }}.zip"
           7z a "$ARCHIVE" "$BIN"
           echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
-      - name: Compute SHA256
-        shell: bash
-        run: |
-          sha256sum "$ARCHIVE" >> SHA256SUMS
-          cat SHA256SUMS
       - name: Upload asset
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}
-          path: |
-            ${{ env.ARCHIVE }}
-            SHA256SUMS
+          path: ${{ env.ARCHIVE }}
 
   release:
     name: Publish GitHub Release
@@ -83,6 +76,10 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+      - name: Compute SHA256SUMS
+        run: |
+          (cd artifacts && sha256sum *.tar.gz *.zip > SHA256SUMS)
+          cat artifacts/SHA256SUMS
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:

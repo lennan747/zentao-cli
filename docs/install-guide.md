@@ -6,19 +6,29 @@ This guide is designed for AI Agents (Claude Code, opencode, Cursor, Trae, etc.)
 
 ## 前置条件 / Prerequisites
 
-- 已安装 `curl` 与 `sh`（一键安装）；若从源码构建需 Rust ≥ 1.80。
-- `curl` and `sh` for one-line install; Rust ≥ 1.80 if building from source.
+- Linux/macOS：`curl` 与 `sh`；Windows：PowerShell 5.1+（x86_64）。若从源码构建需 Rust ≥ 1.80。
+- Linux/macOS: `curl` and `sh`; Windows: PowerShell 5.1+ (x86_64). Rust ≥ 1.80 if building from source.
 
 ## Step 1 — 安装 CLI / Install CLI
+
+Linux / macOS（arm64）：
 
 ```shell
 curl -fsSL https://raw.githubusercontent.com/lennan747/zentao-cli/master/install.sh | sh
 ```
 
+Windows（PowerShell 5.1+，x86_64）：
+
+```powershell
+irm https://raw.githubusercontent.com/lennan747/zentao-cli/master/install.ps1 | iex
+```
+
+> Windows 默认装到 `%LOCALAPPDATA%\zentao-cli\bin` 并自动加入用户 PATH，**新开终端生效**。AI 安装后如需当前会话直接调用，用完整路径 `%LOCALAPPDATA%\zentao-cli\bin\zentao-cli.exe`。
+
 安装后确认版本：
 
 ```shell
-zentao-cli --version   # 期望输出 zentao-cli 0.1.0
+zentao-cli --version   # 期望输出 zentao-cli 0.1.x
 ```
 
 ## Step 2 — 安装 Skill / Install Skill

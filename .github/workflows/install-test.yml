@@ -1,0 +1,35 @@
+name: install-test
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  windows-one-click-install:
+    name: install.ps1 (windows-latest)
+    runs-on: windows-latest
+    steps:
+      - name: Run one-line install and verify
+        shell: pwsh
+        env:
+          ZENTAO_CLI_INSTALL_DIR: ${{ runner.temp }}\zentao-cli-bin
+          ZENTAO_CLI_NO_PATH: "1"
+        run: |
+          irm https://raw.githubusercontent.com/lennan747/zentao-cli/master/install.ps1 | iex
+          $out = & "$env:ZENTAO_CLI_INSTALL_DIR\zentao-cli.exe" --version
+          if ($out -notmatch '^zentao-cli ') { throw "unexpected --version output: $out" }
+          Write-Host "verified: $out"
+
+  unix-one-click-install:
+    name: install.sh (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run one-line install and verify
+        env:
+          ZENTAO_CLI_INSTALL_DIR: ${{ runner.temp }}/zentao-cli-bin
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/lennan747/zentao-cli/master/install.sh | sh
+          out="$("$ZENTAO_CLI_INSTALL_DIR/zentao-cli" --version)"
+          case "$out" in zentao-cli\ *) ;; *) echo "unexpected --version output: $out" >&2; exit 1 ;; esac
+          echo "verified: $out"

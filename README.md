@@ -35,18 +35,29 @@
 
 ## 安装
 
-> 要求：Linux / macOS x86_64 或 macOS arm64，支持 SHA256 校验；Windows 请使用 [WSL](https://learn.microsoft.com/windows/wsl/install) 后按 Linux 方式安装，或手动下载对应资产。Rust 源码安装要求 Rust >= 1.80。
+> 要求：Linux / macOS arm64 / Windows x86_64，支持 SHA256 校验。Rust 源码安装要求 Rust >= 1.80。
 
 ### 一键安装（推荐）
 
-从 GitHub Releases 拉取最新二进制，自动校验 SHA256：
+从 GitHub Releases 拉取最新二进制，自动校验 SHA256。
+
+Linux / macOS：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/lennan747/zentao-cli/master/install.sh | sh
 ```
 
 - 安装到 `~/.local/bin/zentao-cli`（可用 `ZENTAO_CLI_INSTALL_DIR` 覆盖）。
-- 指定版本：`ZENTAO_CLI_VERSION=v0.1.0 curl -fsSL https://raw.githubusercontent.com/lennan747/zentao-cli/master/install.sh | sh`。
+- 指定版本：`ZENTAO_CLI_VERSION=v0.1.1 curl -fsSL https://raw.githubusercontent.com/lennan747/zentao-cli/master/install.sh | sh`。
+
+Windows（PowerShell 5.1+，x86_64）：
+
+```powershell
+irm https://raw.githubusercontent.com/lennan747/zentao-cli/master/install.ps1 | iex
+```
+
+- 安装到 `%LOCALAPPDATA%\zentao-cli\bin\zentao-cli.exe`，并自动加入用户 PATH（**新开终端生效**）。
+- 可用环境变量覆盖：`ZENTAO_CLI_VERSION`（指定版本）、`ZENTAO_CLI_INSTALL_DIR`（安装目录）、`ZENTAO_CLI_NO_PATH=1`（跳过 PATH 写入）。
 
 ### cargo 安装
 
@@ -783,7 +794,7 @@ JSON 输出字段即内部稳定 DTO：
 ## 卸载
 
 ```bash
-# 脚本安装
+# 脚本安装（Linux/macOS）
 rm -f ~/.local/bin/zentao-cli
 
 # cargo 安装
@@ -791,6 +802,13 @@ cargo uninstall zentao-cli
 
 # 配置与会话
 rm -rf ~/.config/zentao-cli
+```
+
+```powershell
+# Windows（PowerShell）：删除程序与配置目录
+Remove-Item -Recurse -Force "$env:LOCALAPPDATA\zentao-cli"
+Remove-Item -Recurse -Force "$env:APPDATA\zentao-cli"
+# 如需，可从「编辑账户的环境变量」里移除 %LOCALAPPDATA%\zentao-cli\bin
 ```
 
 ## 开发

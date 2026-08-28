@@ -34,12 +34,11 @@ detect_target() {
         Darwin)
             case "$arch" in
                 arm64) echo "aarch64-apple-darwin" ;;
-                x86_64) echo "x86_64-apple-darwin" ;;
-                *) die "不支持的 macOS 架构: $arch" ;;
+                *) die "暂不支持的 macOS 架构: $arch（当前仅提供 arm64；macOS Intel 请用 cargo 安装）" ;;
             esac
             ;;
         *)
-            die "不支持的操作系统: $os（Linux/macOS 可用；Windows 请使用 WSL 或手动下载）"
+            die "不支持的操作系统: $os（Linux/macOS 可用；Windows 请用 PowerShell: irm https://raw.githubusercontent.com/lennan747/zentao-cli/master/install.ps1 | iex）"
             ;;
     esac
 }
