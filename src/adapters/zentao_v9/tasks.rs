@@ -113,12 +113,13 @@ impl ZentaoV9TaskGateway {
         })
     }
 
-    fn detail_from(data: &Value) -> Result<TaskDetail, QueryError> {
+    fn detail_from(data: &Value, server: &str) -> Result<TaskDetail, QueryError> {
         let task = data.get("task").ok_or(QueryError::IncompatibleResponse)?;
         let project_name = data
             .get("project")
             .map(|p| str_field(p, "name"))
             .unwrap_or_else(|| str_field(task, "projectName"));
+        let raw_desc = str_field(task, "desc");
         Ok(TaskDetail {
             id: EntityId::from(str_field(task, "id")),
             project_id: EntityId::from(str_field(task, "project")),
@@ -127,7 +128,8 @@ impl ZentaoV9TaskGateway {
             status: enum_field::<TaskStatus>(task, "status"),
             priority: enum_field::<TaskPriority>(task, "pri"),
             assigned_to: str_field(task, "assignedTo"),
-            desc: super::normalize::strip_html(&str_field(task, "desc")),
+            desc_images: super::normalize::resolve_image_urls(&raw_desc, server),
+            desc: super::normalize::strip_html(&raw_desc),
             opened_by: str_field(task, "openedBy"),
             opened_date: opt_date(task, "openedDate"),
             deadline: opt_date(task, "deadline"),
@@ -185,7 +187,7 @@ impl TaskGateway for ZentaoV9TaskGateway {
             .get_text(&Routes::task_view(self.client.server(), &id.0))
             .await?;
         let data = parse_body(&body)?;
-        Self::detail_from(&data)
+        Self::detail_from(&data, self.client.server())
     }
 
     async fn create_task(&self, project: EntityId, draft: TaskDraft) -> Result<(), QueryError> {

@@ -67,6 +67,118 @@ pub fn strip_html(input: &str) -> String {
     out.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+/// 解码富文本中常见的 HTML 实体（用于 <img> src 属性值）。
+fn decode_attr_entities(s: &str) -> String {
+    let mut out = s.to_string();
+    for (entity, decoded) in [
+        ("&amp;", "&"),
+        ("&lt;", "<"),
+        ("&gt;", ">"),
+        ("&quot;", "\""),
+        ("&#39;", "'"),
+    ] {
+        out = out.replace(entity, decoded);
+    }
+    out
+}
+
+/// 从富文本 HTML 中提取 `<img src="...">` 的 src 列表（去重、保序）。
+///
+/// 不区分大小写；容忍属性顺序与单/双引号；属性值中的常见 HTML 实体会解码。
+pub fn extract_image_urls(input: &str) -> Vec<String> {
+    let mut urls = Vec::new();
+    let raw = input.as_bytes();
+    let mut i = 0usize;
+    while i + 4 < raw.len() {
+        // 找到 "<img"（大小写不敏感；排除 <image 之类的前缀误匹配）
+        if raw[i] == b'<'
+            && raw[i + 1..i + 4].eq_ignore_ascii_case(b"img")
+            && (raw[i + 4].is_ascii_whitespace() || raw[i + 4] == b'/' || raw[i + 4] == b'>')
+        {
+            // 在该标签内寻找 src=
+            let mut j = i + 4;
+            while j < raw.len() && raw[j] != b'>' {
+                if j + 4 <= raw.len() && raw[j..j + 4].eq_ignore_ascii_case(b"src=") {
+                    let mut k = j + 4;
+                    let quote = if k < raw.len() && (raw[k] == b'"' || raw[k] == b'\'') {
+                        let q = raw[k];
+                        k += 1;
+                        Some(q)
+                    } else {
+                        None
+                    };
+                    let start = k;
+                    let end = match quote {
+                        Some(q) => {
+                            while k < raw.len() && raw[k] != q {
+                                k += 1;
+                            }
+                            k
+                        }
+                        None => {
+                            while k < raw.len() && !raw[k].is_ascii_whitespace() && raw[k] != b'>' {
+                                k += 1;
+                            }
+                            // 无引号属性值末尾的 `/` 可能是自闭合标签标记（如 src=a.png/>）
+                            if k < raw.len() && raw[k] == b'>' && k > start && raw[k - 1] == b'/' {
+                                k -= 1;
+                            }
+                            k
+                        }
+                    };
+                    let value = decode_attr_entities(&String::from_utf8_lossy(&raw[start..end]))
+                        .trim()
+                        .to_string();
+                    if !value.is_empty() && !urls.contains(&value) {
+                        urls.push(value);
+                    }
+                    j = end;
+                } else {
+                    j += 1;
+                }
+            }
+            i = j.max(i + 1);
+        } else {
+            i += 1;
+        }
+    }
+    urls
+}
+
+/// 把 <img> src 解析为可访问的绝对 URL。
+///
+/// - `http://`/`https://`/`data:` 原样返回；
+/// - `//host/...` 用 server 的协议补全；
+/// - `/path` 或相对路径拼接到 server（末尾 `/` 已按约定去掉）。
+pub fn resolve_image_url(src: &str, server: &str) -> String {
+    let src = src.trim();
+    if src.is_empty() {
+        return String::new();
+    }
+    if src.starts_with("http://") || src.starts_with("https://") || src.starts_with("data:") {
+        return src.to_string();
+    }
+    let server = server.trim_end_matches('/');
+    if let Some(rest) = src.strip_prefix("//") {
+        let scheme = server.split("://").next().unwrap_or("http");
+        return format!("{scheme}://{rest}");
+    }
+    if src.starts_with('/') {
+        format!("{server}{src}")
+    } else {
+        format!("{server}/{src}")
+    }
+}
+
+/// 从富文本 HTML 中提取并解析为绝对 URL 的图片列表。
+pub fn resolve_image_urls(input: &str, server: &str) -> Vec<String> {
+    extract_image_urls(input)
+        .iter()
+        .map(|s| resolve_image_url(s, server))
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -92,5 +204,51 @@ mod tests {
         let v = json!({"n": "42", "bad": "x"});
         assert_eq!(num_field::<u64>(&v, "n"), 42);
         assert_eq!(num_field::<u64>(&v, "bad"), 0);
+    }
+
+    #[test]
+    fn extract_image_urls_finds_img_src() {
+        let html = r#"<p>步骤1</p><p><img src="data/upload/2026/08/abc.png" alt="" /></p>"#;
+        assert_eq!(extract_image_urls(html), vec!["data/upload/2026/08/abc.png"]);
+    }
+
+    #[test]
+    fn extract_image_urls_handles_case_quotes_and_order() {
+        let html = concat!(
+            r#"<IMG SRC="a.png">"#,
+            r#"<img alt="x" src='b.png' class="c">"#,
+            r#"<img src=c.png/>"#,
+        );
+        assert_eq!(extract_image_urls(html), vec!["a.png", "b.png", "c.png"]);
+    }
+
+    #[test]
+    fn extract_image_urls_dedupes_and_decodes_entities() {
+        let html = r#"<img src="a.png?x=1&amp;y=2"><img src="a.png?x=1&amp;y=2"><img src="&quot;b.png&quot;">"#;
+        // &quot; 引号解码后仍是 b.png
+        assert_eq!(extract_image_urls(html), vec!["a.png?x=1&y=2", "\"b.png\""]);
+    }
+
+    #[test]
+    fn extract_image_urls_ignores_non_img_prefix() {
+        assert!(extract_image_urls("<image src=\"x.png\"><p><imgs src=\"y.png\">").is_empty());
+    }
+
+    #[test]
+    fn resolve_image_url_absolute_and_relative() {
+        let server = "https://zentao.example.com";
+        assert_eq!(
+            resolve_image_url("https://cdn.x.com/a.png", server),
+            "https://cdn.x.com/a.png"
+        );
+        assert_eq!(resolve_image_url("data:image/png;base64,AAA", server), "data:image/png;base64,AAA");
+        assert_eq!(
+            resolve_image_url("//cdn.x.com/a.png", server),
+            "https://cdn.x.com/a.png"
+        );
+        assert_eq!(resolve_image_url("/data/upload/a.png", server), "https://zentao.example.com/data/upload/a.png");
+        assert_eq!(resolve_image_url("data/upload/a.png", server), "https://zentao.example.com/data/upload/a.png");
+        // server 末尾带 / 也不重复
+        assert_eq!(resolve_image_url("/a.png", "https://x.com/"), "https://x.com/a.png");
     }
 }

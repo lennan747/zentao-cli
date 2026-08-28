@@ -19,16 +19,18 @@ impl ZentaoV9ProjectGateway {
         Self { client }
     }
 
-    fn detail_from(value: &Value) -> Result<ProjectDetail, QueryError> {
+    fn detail_from(value: &Value, server: &str) -> Result<ProjectDetail, QueryError> {
         let project = value
             .get("project")
             .ok_or(QueryError::IncompatibleResponse)?;
+        let raw_desc = str_field(project, "desc");
         Ok(ProjectDetail {
             id: EntityId::from(str_field(project, "id")),
             code: str_field(project, "code"),
             name: str_field(project, "name"),
             status: enum_field::<ProjectStatus>(project, "status"),
-            desc: super::normalize::strip_html(&str_field(project, "desc")),
+            desc_images: super::normalize::resolve_image_urls(&raw_desc, server),
+            desc: super::normalize::strip_html(&raw_desc),
             pm: str_field(project, "PM"),
             begin: opt_date(project, "begin"),
             end: opt_date(project, "end"),
@@ -81,6 +83,6 @@ impl ProjectGateway for ZentaoV9ProjectGateway {
             .get_text(&Routes::project_view(self.client.server(), &id.0))
             .await?;
         let data = parse_body(&body)?;
-        Self::detail_from(&data)
+        Self::detail_from(&data, self.client.server())
     }
 }

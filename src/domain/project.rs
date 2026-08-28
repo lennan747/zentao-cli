@@ -45,6 +45,9 @@ pub struct ProjectDetail {
     pub status: ProjectStatus,
     #[serde(default)]
     pub desc: String,
+    /// 描述中 <img> 图片的绝对 URL 列表（无图片时省略）。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub desc_images: Vec<String>,
     #[serde(default)]
     pub pm: String,
     #[serde(default)]

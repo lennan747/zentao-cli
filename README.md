@@ -772,6 +772,8 @@ JSON 输出字段即内部稳定 DTO：
 - `BugSummary`：`id`、`product_id`、`project_id`、`title`、`status`、`severity`、`priority`、`assigned_to`、`opened_by`
 - `BugDetail`：+ `product_name`、`steps`
 
+富文本字段（`desc` / `steps`）中的 `<img>` 图片会额外提取为绝对 URL 列表：项目/任务为 `desc_images`，Bug 为 `steps_images`（无图片时字段省略）。表格输出中显示为「描述图片 / 重现步骤图片」行，每张图片一行 URL，可直接复制或点击打开。
+
 列表输出为 `Page` 结构：`items`、`total`、`page`、`per_page`、`total_pages`。
 
 ## 退出码

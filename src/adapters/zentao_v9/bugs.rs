@@ -81,8 +81,9 @@ impl ZentaoV9BugGateway {
         })
     }
 
-    fn detail_from(data: &Value) -> Result<BugDetail, QueryError> {
+    fn detail_from(data: &Value, server: &str) -> Result<BugDetail, QueryError> {
         let bug = data.get("bug").ok_or(QueryError::IncompatibleResponse)?;
+        let raw_steps = str_field(bug, "steps");
         Ok(BugDetail {
             id: EntityId::from(str_field(bug, "id")),
             product_id: EntityId::from(str_field(bug, "product")),
@@ -95,7 +96,8 @@ impl ZentaoV9BugGateway {
             assigned_to: str_field(bug, "assignedTo"),
             opened_by: str_field(bug, "openedBy"),
             opened_date: opt_date(bug, "openedDate"),
-            steps: super::normalize::strip_html(&str_field(bug, "steps")),
+            steps_images: super::normalize::resolve_image_urls(&raw_steps, server),
+            steps: super::normalize::strip_html(&raw_steps),
         })
     }
 }
@@ -147,7 +149,7 @@ impl BugGateway for ZentaoV9BugGateway {
             .get_text(&Routes::bug_view(self.client.server(), &id.0))
             .await?;
         let data = parse_body(&body)?;
-        Self::detail_from(&data)
+        Self::detail_from(&data, self.client.server())
     }
 
     async fn create_bug(&self, product: EntityId, draft: BugDraft) -> Result<(), QueryError> {

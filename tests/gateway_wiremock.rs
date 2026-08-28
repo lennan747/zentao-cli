@@ -348,6 +348,69 @@ async fn bug_get_returns_detail() {
 }
 
 #[tokio::test]
+async fn bug_get_extracts_steps_images() {
+    let server = MockServer::start().await;
+    let data = wrap(r#"{"title":"t","productName":"示例产品","bug":{"id":"41824","title":"带图Bug","status":"active","severity":"3","pri":"3","steps":"<p>步骤1</p><p><img src=\"data/upload/2026/08/a.png\" alt=\"\" /></p><p><img src='https://cdn.x.com/b.png'></p>"}}"#);
+    let _mock = mount(&server, "GET", "/bug-view-41824.json", data).await;
+
+    let client = ZentaoV9Client::new(server.uri()).unwrap();
+    let gateway = ZentaoV9BugGateway::new(client);
+    let detail = gateway
+        .get_bug(EntityId::from("41824"))
+        .await
+        .expect("bug detail with images");
+
+    assert_eq!(detail.steps, "步骤1");
+    assert_eq!(
+        detail.steps_images,
+        vec![
+            format!("{}/data/upload/2026/08/a.png", server.uri()),
+            "https://cdn.x.com/b.png".to_string()
+        ]
+    );
+}
+
+#[tokio::test]
+async fn task_get_extracts_desc_images() {
+    let server = MockServer::start().await;
+    let data = wrap(r#"{"task":{"id":"1001","project":"7","name":"带图任务","status":"doing","pri":"2","desc":"<p>说明</p><img src=\"/data/upload/x.jpg\"/>","openedBy":"u","estimate":"1","consumed":"0","left":"1"}}"#);
+    let _mock = mount(&server, "GET", "/task-view-1001.json", data).await;
+
+    let client = ZentaoV9Client::new(server.uri()).unwrap();
+    let gateway = ZentaoV9TaskGateway::new(client);
+    let detail = gateway
+        .get_task(EntityId::from("1001"))
+        .await
+        .expect("task detail with images");
+
+    assert_eq!(detail.desc, "说明");
+    assert_eq!(
+        detail.desc_images,
+        vec![format!("{}/data/upload/x.jpg", server.uri())]
+    );
+}
+
+#[tokio::test]
+async fn project_get_extracts_desc_images() {
+    let server = MockServer::start().await;
+    let data = wrap(r#"{"project":{"id":"101","code":"P","name":"带图项目","status":"doing","desc":"<p>项目说明</p><p><img src=\"data/upload/p.png\"/></p>","PM":"pm1","begin":"2026-01-01","end":"0000-00-00"}}"#);
+    let _mock = mount(&server, "GET", "/project-view-101.json", data).await;
+
+    let client = ZentaoV9Client::new(server.uri()).unwrap();
+    let gateway = ZentaoV9ProjectGateway::new(client);
+    let detail = gateway
+        .get_project(EntityId::from("101"))
+        .await
+        .expect("project detail with images");
+
+    assert_eq!(detail.desc, "项目说明");
+    assert_eq!(
+        detail.desc_images,
+        vec![format!("{}/data/upload/p.png", server.uri())]
+    );
+}
+
+#[tokio::test]
 async fn empty_lists_succeed_with_empty_page() {
     let server = MockServer::start().await;
     let empty_tasks = wrap(

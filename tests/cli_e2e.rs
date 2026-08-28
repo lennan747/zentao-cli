@@ -182,6 +182,49 @@ async fn task_and_bug_commands_work() {
 }
 
 #[tokio::test]
+async fn bug_get_shows_steps_images() {
+    let server = MockServer::start().await;
+    mount_login_flow(&server, fixture("task-list.json")).await;
+    let data = r#"{"status":"success","data":"{\"title\":\"t\",\"productName\":\"示例产品\",\"bug\":{\"id\":\"41824\",\"title\":\"带图Bug\",\"status\":\"active\",\"severity\":\"3\",\"pri\":\"3\",\"steps\":\"<p>步骤1</p><p><img src=\\\"data/upload/a.png\\\"></p>\"}}"}"#.to_string();
+    Mock::given(method("GET"))
+        .and(path("/bug-view-41824.json"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(data))
+        .mount(&server)
+        .await;
+
+    let home = TempDir::new().unwrap();
+    zentao(&home)
+        .args([
+            "login",
+            "--server",
+            &server.uri(),
+            "--account",
+            "example-user",
+        ])
+        .write_stdin("secret\n")
+        .assert()
+        .success();
+
+    let expected_url = format!("{}/data/upload/a.png", server.uri());
+
+    // JSON 模式：steps_images 绝对 URL 数组
+    zentao(&home)
+        .args(["bug", "get", "41824", "--format", "json"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("steps_images"))
+        .stdout(predicates::str::contains(&expected_url));
+
+    // table 模式：重现步骤图片行 + URL
+    zentao(&home)
+        .args(["bug", "get", "41824"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("重现步骤图片"))
+        .stdout(predicates::str::contains(&expected_url));
+}
+
+#[tokio::test]
 async fn logout_clears_session_and_next_query_requires_login() {
     let server = MockServer::start().await;
     mount_login_flow(&server, fixture("task-list.json")).await;

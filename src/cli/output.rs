@@ -210,6 +210,8 @@ fn field_label(key: &str) -> &str {
         "module" => "模块",
         "comment" => "备注",
         "steps" => "重现步骤",
+        "steps_images" => "重现步骤图片",
+        "desc_images" => "描述图片",
         "keywords" => "关键词",
         "os" => "操作系统",
         "browser" => "浏览器",
@@ -295,6 +297,27 @@ pub fn print_value<T: Serialize>(value: &T, format: OutputFormat) -> anyhow::Res
                 let mut table = new_table();
                 table.set_header(header_row(&["字段", "值"]));
                 for (key, val) in map {
+                    if key.ends_with("_images") {
+                        // 图片 URL 列表：每行一张，可直接复制/点击
+                        if let Value::Array(items) = &val {
+                            let urls: Vec<&str> =
+                                items.iter().filter_map(|x| x.as_str()).collect();
+                            if urls.is_empty() {
+                                continue;
+                            }
+                            let joined = urls
+                                .iter()
+                                .enumerate()
+                                .map(|(i, u)| format!("{}. {u}", i + 1))
+                                .collect::<Vec<_>>()
+                                .join("\n");
+                            table.add_row([
+                                plain(field_label(&key)),
+                                plain(wrap_value(&joined, MAX_VALUE_WIDTH)),
+                            ]);
+                        }
+                        continue;
+                    }
                     let raw = clean_display(&value_cell(&val));
                     let cell_value = if key == "status" {
                         status_value_label(&raw).unwrap_or(&raw).to_string()

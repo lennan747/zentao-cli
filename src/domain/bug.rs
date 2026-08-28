@@ -87,6 +87,9 @@ pub struct BugDetail {
     pub opened_date: Option<String>,
     #[serde(default)]
     pub steps: String,
+    /// 重现步骤中 <img> 图片的绝对 URL 列表（无图片时省略）。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub steps_images: Vec<String>,
 }
 
 /// 新建 Bug 草稿。
