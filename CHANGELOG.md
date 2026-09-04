@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-04
+
 ### 新增
 
 - 用户查询命令 `zentao-cli user list` / `user search <关键词>`：输出「账号 → 真实姓名」映射（table/json）。数据来自旧版页面响应顶层附带的全量 `users` 映射（主源 `my-task.json`，备源 `project-all-0.json`），普通权限账号可访问。
@@ -47,6 +49,7 @@
 - CI 与发布：GitHub Actions 门禁 + tag 触发发布多平台二进制与 `SHA256SUMS`。
 - 一键安装：`install.sh`（下载 + SHA256 校验 + 安装到 `~/.local/bin`）。
 
-[Unreleased]: https://github.com/lennan747/zentao-cli/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/lennan747/zentao-cli/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/lennan747/zentao-cli/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/lennan747/zentao-cli/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/lennan747/zentao-cli/releases/tag/v0.1.0
