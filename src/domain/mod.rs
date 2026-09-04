@@ -2,6 +2,7 @@ pub mod bug;
 pub mod error;
 pub mod project;
 pub mod task;
+pub mod user;
 
 #[allow(unused_imports)]
 pub use bug::{
@@ -16,6 +17,7 @@ pub use task::{
     TaskDetail, TaskDraft, TaskEdit, TaskFinishParams, TaskNoteParams, TaskPriority,
     TaskStartParams, TaskStatus, TaskSummary,
 };
+pub use user::{display_mapping, filter_users, match_users, UserMatch, UserSummary};
 
 /// 分页结果。
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]

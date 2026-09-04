@@ -1,11 +1,11 @@
 ---
 name: zentao-cli
-description: 通过 zentao-cli 命令行操作禅道（禅道v9.0.3 旧版 .json 接口）。当用户提到禅道、zentao、任务、task、Bug、缺陷、项目、project、工时、预估、指派、评论、状态流转，或要求查询/创建/编辑/关闭/解决任务与 Bug 时触发。Use when the user asks to query or modify ZenTao tasks, bugs, or projects.
+description: 通过 zentao-cli 命令行操作禅道（禅道v9.0.3 旧版 .json 接口）。当用户提到禅道、zentao、任务、task、Bug、缺陷、项目、project、工时、预估、指派、按姓名指派、评论、状态流转、用户账号查询，或要求查询/创建/编辑/关闭/解决任务与 Bug 时触发。Use when the user asks to query or modify ZenTao tasks, bugs, or projects.
 ---
 
 # zentao-cli（禅道 CLI）Skill
 
-用 `zentao-cli` 帮用户操作禅道。本工具对接禅道 v9.0.3 的旧版 `.json` 接口，覆盖 `login/logout/config/project/task/bug/update` 七类命令。
+用 `zentao-cli` 帮用户操作禅道。本工具对接禅道 v9.0.3 的旧版 `.json` 接口，覆盖 `login/logout/config/project/task/bug/user/update` 八类命令。
 
 ## 一、前置检查（开始前必须做）
 
@@ -75,6 +75,12 @@ zentao-cli project list [--status wait|doing|done|suspended|closed|all]
 zentao-cli project get <id>
 ```
 
+### 用户（只读）
+```bash
+zentao-cli user list                        # 全部用户（账号 → 真实姓名）
+zentao-cli user search <关键词>             # 账号/姓名包含匹配（大小写不敏感）
+```
+
 ### 任务
 ```bash
 zentao-cli task list [-s wait|doing|done|pause|cancel|closed] [-a me]   # 数据来自「我的任务」；-s 本地过滤；-a 仅支持 me
@@ -82,11 +88,11 @@ zentao-cli task get <id>
 zentao-cli task create <项目ID> --name <名称> \
   [--desc 描述] [--pri 1-4] [--type design|devel|test|study|discuss|ui|affair|misc|production|management] \
   [--estimate 小时] [--est-started YYYY-MM-DD] [--deadline YYYY-MM-DD] \
-  [--module 模块ID] [--assigned-to 账号] [--mailto 账号]... 
+  [--module 模块ID] [--assigned-to 账号或姓名] [--mailto 账号]... 
 zentao-cli task edit <id> [--name] [--desc] [--assigned-to] [--pri 0-4] [--type] \
   [--status wait|doing|done|pause|cancel|closed] [--estimate] [--consumed] [--left] \
   [--deadline] [--est-started] [--comment]
-zentao-cli task assign <id> <账号> [--comment]
+zentao-cli task assign <id> <账号或姓名> [--comment]
 zentao-cli task start <id> --left <小时> [--consumed] [--real-started "YYYY-MM-DD HH:MM:SS"] [--assigned-to] [--comment]
 zentao-cli task finish <id> --consumed <小时>   # consumed 必填且 >0
 zentao-cli task cancel <id>                     # 取消
@@ -101,11 +107,11 @@ zentao-cli bug list [-s active|resolved|closed] [-a me]   # 数据来自「指�
 zentao-cli bug get <id>
 zentao-cli bug create <产品ID> --title <标题> \
   [--steps 复现步骤] [--module 模块ID] [--project 项目ID] \
-  [--severity 1-4] [--pri 0-4] [--assigned-to 账号] \
+  [--severity 1-4] [--pri 0-4] [--assigned-to 账号或姓名] \
   [--opened-build 版本] [--deadline YYYY-MM-DD] [--keywords 关键词] \
   [--type codeerror|designchange|newfeature|others|...] [--os all|windows|...]
 zentao-cli bug edit <id> ...
-zentao-cli bug assign <id> <账号>
+zentao-cli bug assign <id> <账号或姓名>
 zentao-cli bug resolve <id> ...    # -> resolved
 zentao-cli bug activate <id>       # resolved/closed -> active
 zentao-cli bug close <id>
@@ -132,6 +138,14 @@ zentao-cli bug comment <id> <内容>
 3. **向用户展示摘要并征得明确确认**后，才去掉 `--dry-run` 执行。
 4. **不得在未经用户同意时使用 `--yes`**。写命令默认交互确认；无 TTY 时会拒绝执行（除非 `--yes`）。
 5. 编辑会连同当前对象全部字段基线一并提交（旧版接口对未提交字段按空值处理），**务必先 get 再 edit**。
+
+### 指派人解析（账号或姓名）
+- 写命令的指派人参数（`--assigned-to` / `assign <位置参数>`）可填**账号或姓名**：账号精确 → 姓名精确 → 账号/姓名包含匹配（大小写不敏感）。
+- Agent 不确定账号时，先 `zentao-cli user search <姓名> --format json` 查询；也可以直接填姓名让 CLI 解析。
+- 唯一命中：自动采用，`--dry-run` 摘要显示映射 `输入 → 账号（姓名）`——把该映射展示给用户确认。
+- **非 TTY（Agent 场景）多候选会直接报错（退出码 6）**，stderr 列出全部候选 `账号（姓名）`；从中让用户确认后**用精确账号重试**。TTY 下则是编号交互选择。
+- 0 命中报错（退出码 6）并给相近候选建议；用户列表获取失败时纯 ASCII 输入按账号原样直通（stderr 有警告），姓名输入报错。
+- `--mailto`（抄送）仍只接受精确账号，不做解析。
 
 ### 状态流转约束
 - `task start`：`--left` 必须 >0（为 0 时禅道会把“开始”当作“完成”并指派回创建人，CLI 直接拒绝）。
@@ -167,5 +181,7 @@ zentao-cli bug comment <id> <内容>
 | 退出码 3 | 未登录 / 会话过期 / 密码错 | 已存密码则自动重登重试；否则 `zentao-cli login` |
 | 退出码 4 | 找不到资源 / 无权限 | 用 `list` 确认 ID；确认账号权限 |
 | 退出码 6 | 参数或远端拒绝 | 核对枚举取值与必填项；重跑并读 stderr |
+| 退出码 6 + 「找到多个匹配」 | 指派人姓名匹配到多个用户 | stderr 已列候选 `账号（姓名）`，与用户确认后用精确账号重试 |
+| 退出码 6 + 「未找到用户」 | 指派人姓名/账号无命中 | 看 stderr 相近候选建议，或 `user search <关键词>` 查询 |
 | `task start` 被拒 | `--left` 为 0 或缺省为 0 | 显式传 `--left >0` |
 | `task finish` 被拒 | `--consumed` 缺或 0 | 显式传 `--consumed >0` |

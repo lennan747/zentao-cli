@@ -4,6 +4,7 @@
 
 - 本项目是独立的 Rust CLI 应用，位于项目根目录。
 - 只与禅道v9.0.3 的旧版 `.json` 接口交互，首期只读。
+- 用户列表（账号→真实姓名）来自旧版页面响应顶层附带的 `users` 映射：主源 `my-task.json`、备源 `project-all-0.json`（`ZentaoV9UserGateway` 内做降级链）；`user-index.json` 仅管理员可访问，不使用。
 - `update` 命令只访问 GitHub Releases（默认 `lennan747/zentao-cli`），可用 `ZENTAO_CLI_UPDATE_API` / `ZENTAO_CLI_UPDATE_DOWNLOAD` 覆盖镜像地址。
 
 ## 分层依赖

@@ -3,10 +3,11 @@ use std::process::ExitCode;
 use clap::{Args, Subcommand};
 
 use super::{fail, load_session_client, ok, CommandContext};
-use crate::adapters::zentao_v9::ZentaoV9BugGateway;
+use crate::adapters::zentao_v9::{ZentaoV9BugGateway, ZentaoV9UserGateway};
 use crate::application::{BugGateway, BugQuery};
 use crate::cli::confirm::{confirm_write, WriteControl, WriteFlags};
 use crate::cli::output;
+use crate::cli::resolve;
 use crate::domain::{
     BugActivateParams, BugDraft, BugEdit, BugNoteParams, BugResolveParams, EntityId, ZentaoError,
 };
@@ -86,7 +87,7 @@ pub struct CreateArgs {
     #[arg(long)]
     pub pri: Option<String>,
 
-    /// 指派给（账号）
+    /// 指派给（账号或姓名，支持模糊解析）
     #[arg(long)]
     pub assigned_to: Option<String>,
 
@@ -137,7 +138,7 @@ pub struct EditArgs {
     /// 优先级 0-4
     #[arg(long)]
     pub pri: Option<String>,
-    /// 指派人账号
+    /// 指派人（账号或姓名，支持模糊解析）
     #[arg(long)]
     pub assigned_to: Option<String>,
     /// 状态（active/resolved/closed）
@@ -173,7 +174,7 @@ pub struct EditArgs {
 pub struct AssignArgs {
     /// Bug ID
     pub id: String,
-    /// 指派给（账号）
+    /// 指派给（账号或姓名，支持模糊解析）
     pub account: String,
     #[arg(long)]
     pub comment: Option<String>,
@@ -199,7 +200,7 @@ pub struct ResolveArgs {
     #[arg(long)]
     pub build_name: Option<String>,
 
-    /// 解决后指派给（账号）
+    /// 解决后指派给（账号或姓名，支持模糊解析）
     #[arg(long)]
     pub assigned_to: Option<String>,
 
@@ -215,6 +216,7 @@ pub struct ActivateArgs {
     /// Bug ID
     pub id: String,
 
+    /// 激活后指派给（账号或姓名，支持模糊解析）
     #[arg(long)]
     pub assigned_to: Option<String>,
     #[arg(long)]
@@ -289,6 +291,7 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
         Ok(c) => c,
         Err(e) => return fail(&e),
     };
+    let user_gateway = ZentaoV9UserGateway::new(client.clone());
     let gateway = ZentaoV9BugGateway::new(client);
 
     match args.command {
@@ -321,6 +324,15 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
                     crate::domain::QueryError::InvalidParameter("Bug 标题不能为空".into()),
                 ));
             }
+            let assigned = match resolve::assigned_to(&user_gateway, a.assigned_to.as_deref()).await
+            {
+                Ok(v) => v,
+                Err(code) => return code,
+            };
+            let assigned_display = assigned
+                .as_ref()
+                .map(|u| u.display.clone())
+                .unwrap_or_default();
             let draft = BugDraft {
                 title: a.title.clone(),
                 steps: a.steps.clone(),
@@ -328,7 +340,7 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
                 project: a.project.clone(),
                 severity: a.severity.clone(),
                 pri: a.pri.clone(),
-                assigned_to: a.assigned_to.clone(),
+                assigned_to: assigned.map(|u| u.account),
                 opened_build: a.opened_build.clone(),
                 deadline: a.deadline.clone(),
                 keywords: a.keywords.clone(),
@@ -351,7 +363,7 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
                     ("keywords", draft.keywords.as_deref().unwrap_or("")),
                     ("module", draft.module.as_deref().unwrap_or("")),
                     ("project", draft.project.as_deref().unwrap_or("")),
-                    ("assignedTo", draft.assigned_to.as_deref().unwrap_or("")),
+                    ("assignedTo", assigned_display.as_str()),
                     ("openedBuild", draft.opened_build.as_deref().unwrap_or("")),
                 ],
             );
@@ -362,12 +374,21 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
             )
         }
         BugCommands::Edit(a) => {
+            let assigned = match resolve::assigned_to(&user_gateway, a.assigned_to.as_deref()).await
+            {
+                Ok(v) => v,
+                Err(code) => return code,
+            };
+            let assigned_display = assigned
+                .as_ref()
+                .map(|u| u.display.clone())
+                .unwrap_or_default();
             let edit = BugEdit {
                 title: a.title.clone(),
                 steps: a.steps.clone(),
                 severity: a.severity.clone(),
                 pri: a.pri.clone(),
-                assigned_to: a.assigned_to.clone(),
+                assigned_to: assigned.map(|u| u.account),
                 status: a.status.clone(),
                 resolution: a.resolution.clone(),
                 resolved_build: a.resolved_build.clone(),
@@ -391,7 +412,7 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
                     ("steps", edit.steps.as_deref().unwrap_or("")),
                     ("severity", edit.severity.as_deref().unwrap_or("")),
                     ("pri", edit.pri.as_deref().unwrap_or("")),
-                    ("assignedTo", edit.assigned_to.as_deref().unwrap_or("")),
+                    ("assignedTo", assigned_display.as_str()),
                     ("status", edit.status.as_deref().unwrap_or("")),
                     ("resolution", edit.resolution.as_deref().unwrap_or("")),
                     (
@@ -416,15 +437,29 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
             )
         }
         BugCommands::Assign(a) => {
+            if a.account.trim().is_empty() {
+                return fail(&ZentaoError::Query(
+                    crate::domain::QueryError::InvalidParameter(
+                        "指派人（账号或姓名）不能为空".into(),
+                    ),
+                ));
+            }
+            let resolved = match resolve::assigned_to(&user_gateway, Some(a.account.as_str())).await
+            {
+                Ok(Some(u)) => u,
+                // 上方已校验非空，解析不会返回“未提供”。
+                Ok(None) => return ok(),
+                Err(code) => return code,
+            };
             let edit = BugEdit {
-                assigned_to: Some(a.account.clone()),
+                assigned_to: Some(resolved.account),
                 comment: a.comment.clone(),
                 ..Default::default()
             };
             let s = summary(
                 &format!("指派 Bug {}", a.id),
                 &[
-                    ("assignedTo", a.account.as_str()),
+                    ("assignedTo", resolved.display.as_str()),
                     ("comment", a.comment.as_deref().unwrap_or("")),
                 ],
             );
@@ -435,11 +470,20 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
             )
         }
         BugCommands::Resolve(a) => {
+            let assigned = match resolve::assigned_to(&user_gateway, a.assigned_to.as_deref()).await
+            {
+                Ok(v) => v,
+                Err(code) => return code,
+            };
+            let assigned_display = assigned
+                .as_ref()
+                .map(|u| u.display.clone())
+                .unwrap_or_default();
             let p = BugResolveParams {
                 resolution: a.resolution.clone(),
                 resolved_build: a.resolved_build.clone(),
                 build_name: a.build_name.clone(),
-                assigned_to: a.assigned_to.clone(),
+                assigned_to: assigned.map(|u| u.account),
                 comment: a.comment.clone(),
             };
             let s = summary(
@@ -448,7 +492,7 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
                     ("resolution", p.resolution.as_deref().unwrap_or("")),
                     ("resolvedBuild", p.resolved_build.as_deref().unwrap_or("")),
                     ("buildName", p.build_name.as_deref().unwrap_or("")),
-                    ("assignedTo", p.assigned_to.as_deref().unwrap_or("")),
+                    ("assignedTo", assigned_display.as_str()),
                     ("comment", p.comment.as_deref().unwrap_or("")),
                 ],
             );
@@ -459,15 +503,24 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
             )
         }
         BugCommands::Activate(a) => {
+            let assigned = match resolve::assigned_to(&user_gateway, a.assigned_to.as_deref()).await
+            {
+                Ok(v) => v,
+                Err(code) => return code,
+            };
+            let assigned_display = assigned
+                .as_ref()
+                .map(|u| u.display.clone())
+                .unwrap_or_default();
             let p = BugActivateParams {
-                assigned_to: a.assigned_to.clone(),
+                assigned_to: assigned.map(|u| u.account),
                 opened_build: a.opened_build.clone(),
                 comment: a.comment.clone(),
             };
             let s = summary(
                 &format!("激活 Bug {}", a.id),
                 &[
-                    ("assignedTo", p.assigned_to.as_deref().unwrap_or("")),
+                    ("assignedTo", assigned_display.as_str()),
                     ("openedBuild", p.opened_build.as_deref().unwrap_or("")),
                     ("comment", p.comment.as_deref().unwrap_or("")),
                 ],

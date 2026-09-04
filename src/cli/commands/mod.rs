@@ -5,6 +5,7 @@ pub mod logout;
 pub mod project;
 pub mod task;
 pub mod update;
+pub mod user;
 
 use std::process::ExitCode;
 use std::time::Duration;
@@ -53,6 +54,8 @@ pub enum Commands {
     Task(task::TaskArgs),
     /// Bug 查询与写操作
     Bug(bug::BugArgs),
+    /// 用户查询（账号 → 真实姓名）
+    User(user::UserArgs),
     /// 更新 zentao-cli 到最新版本
     Update(update::UpdateArgs),
 }

@@ -207,3 +207,167 @@ async fn finish_posts_consumed_baseline_and_current() {
         .success()
         .stdout(predicates::str::contains("已提交成功"));
 }
+
+// ---- 指派人解析（姓名 → 账号）----
+
+/// 挂载用户列表来源（my-task.json 顶层 users 映射，虚构账号）。
+async fn mount_users(server: &MockServer) {
+    Mock::given(method("GET"))
+        .and(path("/my-task.json"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(fixture("user-list.json")))
+        .mount(server)
+        .await;
+}
+
+#[tokio::test]
+async fn assign_by_realname_resolves_unique_and_dry_run_issues_no_write() {
+    // AC1 + AC8：只挂用户列表来源；task-view/写路由不挂载，若被触碰会 404 导致失败。
+    let server = MockServer::start().await;
+    mount_users(&server).await;
+    let home = TempDir::new().unwrap();
+    seed_session(&home, &server.uri());
+
+    zentao(&home)
+        .args(["task", "assign", "946", "李男", "--dry-run"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("李男 → wanglinan（王李男）"))
+        .stdout(predicates::str::contains("[dry-run]"));
+
+    let requests = server.received_requests().await.unwrap();
+    assert!(requests.iter().all(|r| r.method == reqwest::Method::GET));
+    assert_eq!(requests.len(), 1);
+}
+
+#[tokio::test]
+async fn assign_multiple_candidates_non_tty_errors_with_candidate_list() {
+    // AC2：非 TTY（assert_cmd 天然无 TTY）多候选 → 退出码 6 + stderr 列全部候选。
+    let server = MockServer::start().await;
+    mount_users(&server).await;
+    let home = TempDir::new().unwrap();
+    seed_session(&home, &server.uri());
+
+    zentao(&home)
+        .args(["task", "assign", "946", "王"])
+        .assert()
+        .code(6)
+        .stderr(predicates::str::contains("找到多个匹配"))
+        .stderr(predicates::str::contains("wangli（王力）"))
+        .stderr(predicates::str::contains("wanglinan（王李男）"))
+        .stderr(predicates::str::contains("账号精确指定"));
+}
+
+#[tokio::test]
+async fn assign_no_match_errors_with_suggestions() {
+    // AC4：0 命中 → 退出码 6 + 相近候选建议 + user search 指引。
+    let server = MockServer::start().await;
+    mount_users(&server).await;
+    let home = TempDir::new().unwrap();
+    seed_session(&home, &server.uri());
+
+    zentao(&home)
+        .args(["task", "assign", "946", "李娜娜"])
+        .assert()
+        .code(6)
+        .stderr(predicates::str::contains("未找到用户 \"李娜娜\""))
+        .stderr(predicates::str::contains("wanglinan（王李男）"))
+        .stderr(predicates::str::contains("user search"));
+}
+
+#[tokio::test]
+async fn assign_by_exact_account_keeps_working() {
+    // AC6：账号精确输入不回归；摘要显示 账号（姓名）。
+    let server = MockServer::start().await;
+    mount_users(&server).await;
+    let home = TempDir::new().unwrap();
+    seed_session(&home, &server.uri());
+
+    zentao(&home)
+        .args(["task", "assign", "946", "demo-user", "--dry-run"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("demo-user（演示用户）"));
+}
+
+#[tokio::test]
+async fn assign_empty_account_rejected_before_network() {
+    let server = MockServer::start().await;
+    let home = TempDir::new().unwrap();
+    seed_session(&home, &server.uri());
+
+    zentao(&home)
+        .args(["task", "assign", "946", "   ", "--dry-run"])
+        .assert()
+        .code(6)
+        .stderr(predicates::str::contains("不能为空"));
+    assert_eq!(server.received_requests().await.unwrap().len(), 0);
+}
+
+#[tokio::test]
+async fn user_list_unavailable_ascii_input_passes_through_with_warning() {
+    // AC7a：用户列表来源全部 404 → ASCII 输入按账号直通（保持旧行为）+ dim 警告。
+    let server = MockServer::start().await;
+    let home = TempDir::new().unwrap();
+    seed_session(&home, &server.uri());
+
+    zentao(&home)
+        .args(["task", "assign", "946", "someone", "--dry-run"])
+        .assert()
+        .success()
+        .stderr(predicates::str::contains("无法获取用户列表"))
+        .stdout(predicates::str::contains("someone"));
+}
+
+#[tokio::test]
+async fn user_list_unavailable_non_ascii_input_errors() {
+    // AC7b：用户列表不可用时姓名（非 ASCII）输入报错，退出码 6。
+    let server = MockServer::start().await;
+    let home = TempDir::new().unwrap();
+    seed_session(&home, &server.uri());
+
+    zentao(&home)
+        .args(["task", "assign", "946", "李男"])
+        .assert()
+        .code(6)
+        .stderr(predicates::str::contains("无法获取用户列表"))
+        .stderr(predicates::str::contains("账号精确指派"));
+}
+
+#[tokio::test]
+async fn create_with_assigned_to_name_resolves_in_summary() {
+    // 可选参数入口：--assigned-to 姓名精确命中，摘要显示映射。
+    let server = MockServer::start().await;
+    mount_users(&server).await;
+    let home = TempDir::new().unwrap();
+    seed_session(&home, &server.uri());
+
+    zentao(&home)
+        .args([
+            "task",
+            "create",
+            "43",
+            "--name",
+            "测试任务",
+            "--assigned-to",
+            "王力",
+            "--dry-run",
+        ])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("王力 → wangli（王力）"));
+}
+
+#[tokio::test]
+async fn bug_assign_by_name_resolves() {
+    // bug 侧位置参数入口同构生效。
+    let server = MockServer::start().await;
+    mount_users(&server).await;
+    let home = TempDir::new().unwrap();
+    seed_session(&home, &server.uri());
+
+    zentao(&home)
+        .args(["bug", "assign", "41292", "李男", "--dry-run"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("李男 → wanglinan（王李男）"));
+}

@@ -3,10 +3,11 @@ use std::process::ExitCode;
 use clap::{Args, Subcommand};
 
 use super::{fail, load_session_client, ok, CommandContext};
-use crate::adapters::zentao_v9::ZentaoV9TaskGateway;
+use crate::adapters::zentao_v9::{ZentaoV9TaskGateway, ZentaoV9UserGateway};
 use crate::application::{TaskGateway, TaskQuery};
 use crate::cli::confirm::{confirm_write, WriteControl, WriteFlags};
 use crate::cli::output;
+use crate::cli::resolve;
 use crate::domain::{
     EntityId, TaskDraft, TaskEdit, TaskFinishParams, TaskNoteParams, TaskStartParams, TaskStatus,
     ZentaoError,
@@ -97,7 +98,7 @@ pub struct CreateArgs {
     #[arg(long)]
     pub module: Option<String>,
 
-    /// 指派给（账号）
+    /// 指派给（账号或姓名，支持模糊解析）
     #[arg(long)]
     pub assigned_to: Option<String>,
 
@@ -118,7 +119,7 @@ pub struct EditArgs {
     pub name: Option<String>,
     #[arg(long)]
     pub desc: Option<String>,
-    /// 指派人账号
+    /// 指派人（账号或姓名，支持模糊解析）
     #[arg(long)]
     pub assigned_to: Option<String>,
     /// 优先级 0-4
@@ -152,7 +153,7 @@ pub struct EditArgs {
 pub struct AssignArgs {
     /// 任务 ID
     pub id: String,
-    /// 指派给（账号）
+    /// 指派给（账号或姓名，支持模糊解析）
     pub account: String,
     /// 备注/评论
     #[arg(long)]
@@ -176,7 +177,7 @@ pub struct StartArgs {
     /// 剩余工时（小时）。必须大于 0：为 0 时禅道会把“开始”当作“完成”
     #[arg(long)]
     pub left: Option<String>,
-    /// 开始后指派给（账号，缺省不变）
+    /// 开始后指派给（账号或姓名，缺省不变）
     #[arg(long)]
     pub assigned_to: Option<String>,
     #[arg(long)]
@@ -197,7 +198,7 @@ pub struct FinishArgs {
     /// 完成日期 YYYY-MM-DD（缺省用服务端当前时间）
     #[arg(long)]
     pub finished_date: Option<String>,
-    /// 完成后指派给（账号，缺省不变）
+    /// 完成后指派给（账号或姓名，缺省不变）
     #[arg(long)]
     pub assigned_to: Option<String>,
     #[arg(long)]
@@ -283,6 +284,7 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
         Ok(c) => c,
         Err(e) => return fail(&e),
     };
+    let user_gateway = ZentaoV9UserGateway::new(client.clone());
     let gateway = ZentaoV9TaskGateway::new(client);
 
     match args.command {
@@ -315,6 +317,15 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
                     ));
                 }
             }
+            let assigned = match resolve::assigned_to(&user_gateway, a.assigned_to.as_deref()).await
+            {
+                Ok(v) => v,
+                Err(code) => return code,
+            };
+            let assigned_display = assigned
+                .as_ref()
+                .map(|u| u.display.clone())
+                .unwrap_or_default();
             let draft = TaskDraft {
                 name: a.name.clone(),
                 desc: a.desc.clone(),
@@ -324,7 +335,7 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
                 estimate: a.estimate.clone(),
                 est_started: a.est_started.clone(),
                 deadline: a.deadline.clone(),
-                assigned_to: a.assigned_to.clone(),
+                assigned_to: assigned.map(|u| u.account),
                 mailto: a.mailto.clone(),
             };
             let s = summary(
@@ -338,7 +349,7 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
                     ("estStarted", draft.est_started.as_deref().unwrap_or("")),
                     ("deadline", draft.deadline.as_deref().unwrap_or("")),
                     ("module", draft.module.as_deref().unwrap_or("")),
-                    ("assignedTo", draft.assigned_to.as_deref().unwrap_or("")),
+                    ("assignedTo", assigned_display.as_str()),
                 ],
             );
             try_write!(
@@ -349,10 +360,19 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
         }
         TaskCommands::Edit(a) => {
             // 编辑至少要提供一个字段，避免无意义提交。
+            let assigned = match resolve::assigned_to(&user_gateway, a.assigned_to.as_deref()).await
+            {
+                Ok(v) => v,
+                Err(code) => return code,
+            };
+            let assigned_display = assigned
+                .as_ref()
+                .map(|u| u.display.clone())
+                .unwrap_or_default();
             let edit = TaskEdit {
                 name: a.name.clone(),
                 desc: a.desc.clone(),
-                assigned_to: a.assigned_to.clone(),
+                assigned_to: assigned.map(|u| u.account),
                 pri: a.pri.clone(),
                 task_type: a.r#type.clone(),
                 status: a.status.clone(),
@@ -373,7 +393,7 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
                 &[
                     ("name", edit.name.as_deref().unwrap_or("")),
                     ("desc", edit.desc.as_deref().unwrap_or("")),
-                    ("assignedTo", edit.assigned_to.as_deref().unwrap_or("")),
+                    ("assignedTo", assigned_display.as_str()),
                     ("pri", edit.pri.as_deref().unwrap_or("")),
                     ("type", edit.task_type.as_deref().unwrap_or("")),
                     ("status", edit.status.as_deref().unwrap_or("")),
@@ -394,15 +414,29 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
             )
         }
         TaskCommands::Assign(a) => {
+            if a.account.trim().is_empty() {
+                return fail(&ZentaoError::Query(
+                    crate::domain::QueryError::InvalidParameter(
+                        "指派人（账号或姓名）不能为空".into(),
+                    ),
+                ));
+            }
+            let resolved = match resolve::assigned_to(&user_gateway, Some(a.account.as_str())).await
+            {
+                Ok(Some(u)) => u,
+                // 上方已校验非空，解析不会返回“未提供”。
+                Ok(None) => return ok(),
+                Err(code) => return code,
+            };
             let edit = TaskEdit {
-                assigned_to: Some(a.account.clone()),
+                assigned_to: Some(resolved.account),
                 comment: a.comment.clone(),
                 ..Default::default()
             };
             let s = summary(
                 &format!("指派任务 {}", a.id),
                 &[
-                    ("assignedTo", a.account.as_str()),
+                    ("assignedTo", resolved.display.as_str()),
                     ("comment", a.comment.as_deref().unwrap_or("")),
                 ],
             );
@@ -446,11 +480,20 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
                 .filter(|s| !s.is_empty())
                 .unwrap_or("0")
                 .to_string();
+            let assigned = match resolve::assigned_to(&user_gateway, a.assigned_to.as_deref()).await
+            {
+                Ok(v) => v,
+                Err(code) => return code,
+            };
+            let assigned_display = assigned
+                .as_ref()
+                .map(|u| u.display.clone())
+                .unwrap_or_else(|| "（不变）".to_string());
             let p = TaskStartParams {
                 real_started: a.real_started.clone(),
                 consumed: Some(consumed.clone()),
                 left: Some(left.clone()),
-                assigned_to: a.assigned_to.clone(),
+                assigned_to: assigned.map(|u| u.account),
                 comment: a.comment.clone(),
             };
             let s = summary(
@@ -464,7 +507,7 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
                     ),
                     ("consumed", consumed.as_str()),
                     ("left", left.as_str()),
-                    ("assignedTo", p.assigned_to.as_deref().unwrap_or("（不变）")),
+                    ("assignedTo", assigned_display.as_str()),
                     ("comment", p.comment.as_deref().unwrap_or("")),
                 ],
             );
@@ -495,10 +538,19 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
                     ));
                 }
             }
+            let assigned = match resolve::assigned_to(&user_gateway, a.assigned_to.as_deref()).await
+            {
+                Ok(v) => v,
+                Err(code) => return code,
+            };
+            let assigned_display = assigned
+                .as_ref()
+                .map(|u| u.display.clone())
+                .unwrap_or_else(|| detail.assigned_to.clone());
             let p = TaskFinishParams {
                 current_consumed: Some(consumed.to_string()),
                 finished_date: a.finished_date.clone(),
-                assigned_to: a.assigned_to.clone(),
+                assigned_to: assigned.map(|u| u.account),
                 comment: a.comment.clone(),
             };
             let s = summary(
@@ -515,12 +567,7 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
                             .as_deref()
                             .unwrap_or("（缺省：服务端当前时间）"),
                     ),
-                    (
-                        "assignedTo",
-                        p.assigned_to
-                            .as_deref()
-                            .unwrap_or(detail.assigned_to.as_str()),
-                    ),
+                    ("assignedTo", assigned_display.as_str()),
                     ("comment", p.comment.as_deref().unwrap_or("")),
                 ],
             );

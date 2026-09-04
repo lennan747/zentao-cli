@@ -10,7 +10,8 @@ use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 use crate::cli::commands::OutputFormat;
 use crate::cli::style;
 use crate::domain::{
-    BugSeverity, BugStatus, BugSummary, Page, ProjectSummary, TaskPriority, TaskStatus, TaskSummary,
+    BugSeverity, BugStatus, BugSummary, Page, ProjectSummary, TaskPriority, TaskStatus,
+    TaskSummary, UserSummary,
 };
 
 /// Field/Value 表格中 Value 列的最大显示宽度（30 个全角字符）。
@@ -225,6 +226,8 @@ fn field_label(key: &str) -> &str {
         "begin" => "开始日期",
         "end" => "结束日期",
         "assignedTo" | "assigned_to" => "指派给",
+        "account" => "账号",
+        "realname" => "姓名",
         "realStarted" => "实际开始时间",
         "estStarted" => "预计开始",
         "currentConsumed" => "本次消耗",
@@ -638,6 +641,33 @@ pub fn print_bug_page(page: &Page<BugSummary>, format: OutputFormat) -> anyhow::
                     page.total, page.page, page.total_pages
                 ))
             );
+        }
+    }
+    Ok(())
+}
+
+/// 将用户列表按指定格式输出（账号/姓名两列）。
+pub fn print_user_page(users: &[UserSummary], format: OutputFormat) -> anyhow::Result<()> {
+    match format {
+        OutputFormat::Json => {
+            println!("{}", serde_json::to_string_pretty(users)?);
+        }
+        OutputFormat::Table => {
+            if users.is_empty() {
+                print_empty();
+                return Ok(());
+            }
+            let mut table = new_table();
+            table.set_header(header_row(&["账号", "姓名"]));
+            adapt_width(&mut table);
+            for user in users {
+                table.add_row([
+                    plain(&user.account),
+                    plain(truncate_display(&user.realname, NAME_MAX_WIDTH as usize)),
+                ]);
+            }
+            println!("{table}");
+            println!("{}", style::dim(&format!("Total: {}", users.len())));
         }
     }
     Ok(())

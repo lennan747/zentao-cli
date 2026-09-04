@@ -10,6 +10,7 @@
 
 - **只读查询**：项目、任务、Bug 的 `list` / `get`，支持状态过滤与 `--format json` 结构化输出。
 - **写操作**：任务与 Bug 的创建、编辑、指派、状态流转、评论。
+- **按姓名指派**：写命令的指派人参数支持中文姓名/模糊输入，自动解析为禅道账号；`user list` / `user search` 可自助查询账号。
 - **安全护栏**：写命令默认打印摘要并交互确认；`--dry-run` 只预览不提交；无 TTY 拒绝执行；密码不进入命令行参数与日志（可选保存到配置，见「配置与凭据安全」）。
 - **友好输出**：极简表格、中文列头与字段名、语义配色、长文本折行与超长截断（详见「输出样式」）。
 - **多环境配置**：`--profile` 支持多套服务器/账号配置。
@@ -26,6 +27,7 @@
   - [项目](#项目)
   - [任务](#任务)
   - [Bug](#bug)
+  - [用户](#用户)
 - [配置与凭据安全](#配置与凭据安全)
 - [输出字段](#输出字段)
 - [退出码](#退出码)
@@ -89,6 +91,7 @@ zentao-cli task list
 zentao-cli task get 1001
 zentao-cli bug list --assigned-to me
 zentao-cli bug get 2001
+zentao-cli user search 李    # 按姓名查账号（写命令指派人支持姓名/模糊输入）
 
 # 3. 写操作（默认需确认；可用 --dry-run 先预览）
 zentao-cli task start 1001 --left 5 --dry-run
@@ -166,6 +169,7 @@ cp -r skills/zentao-cli ~/.claude/skills/
 | 状态前置校验 | start/finish/cancel/close/activate 先回读当前状态，不符直接拒绝（不发出写请求） |
 | `task start` 防护 | left 必须 >0（为 0 时禅道会直接标记完成并指派回创建人），否则拒绝执行 |
 | `task finish` 基线 | `--consumed` 必填且 >0，CLI 自动带之前总计消耗作基线，防止误报"总计消耗必须大于之前消耗" |
+| 指派人解析 | 写命令指派人参数支持账号或姓名（账号精确 → 姓名精确 → 包含匹配，大小写不敏感）。唯一命中自动采用并在摘要显示解析映射 `输入 → 账号（姓名）`；多候选时 TTY 下编号选择、非 TTY 报错并列出候选（退出码 6）；0 命中报错并给相近建议；用户列表获取失败时纯 ASCII 输入按账号原样直通（附警告），姓名输入报错 |
 
 **过滤能力说明**（以旧版接口实际能力为准）：
 
@@ -400,7 +404,7 @@ zentao-cli task create <project> --name <名称> [选项...]
 | `--est-started <YYYY-MM-DD>` | 否 | 预计开始日期 |
 | `--deadline <YYYY-MM-DD>` | 否 | 截止日期 |
 | `--module <id>` | 否 | 所属模块 ID，0=根 |
-| `--assigned-to <账号>` | 否 | 指派给 |
+| `--assigned-to <账号或姓名>` | 否 | 指派给，姓名支持模糊解析 |
 | `--mailto <账号>` | 否 | 抄送，可多次指定 |
 
 ```bash
@@ -420,7 +424,7 @@ zentao-cli task edit <id> [选项...]
 | `<id>` | 是 | 任务 ID |
 | `--name <名称>` | 否 | 任务名称 |
 | `--desc <描述>` | 否 | 任务描述 |
-| `--assigned-to <账号>` | 否 | 指派人 |
+| `--assigned-to <账号或姓名>` | 否 | 指派人，姓名支持模糊解析 |
 | `--pri <0-4>` | 否 | 优先级 |
 | `--type <TYPE>` | 否 | 类型（同 create） |
 | `--status <status>` | 否 | 状态：wait/doing/done/pause/cancel/closed。仅当你显式指定时才提交（避免触发工作流校验） |
@@ -442,13 +446,13 @@ zentao-cli task edit 1001 --deadline 2026-06-16 --comment "调整排期"
 指派任务（通过编辑接口提交 `assignedTo`）。
 
 ```
-zentao-cli task assign <id> <账号> [--comment <备注>]
+zentao-cli task assign <id> <账号或姓名> [--comment <备注>]
 ```
 
 | 选项 | 必填 | 说明 |
 |---|---|---|
 | `<id>` | 是 | 任务 ID |
-| `<账号>` | 是 | 指派给（位置参数） |
+| `<账号或姓名>` | 是 | 指派给（位置参数），姓名支持模糊解析 |
 | `--comment <备注>` | 否 | 附带评论 |
 
 ```bash
@@ -469,7 +473,7 @@ zentao-cli task start <id> [选项...]
 | `--left <小时>` | **强烈建议** | 剩余工时，**必须 >0**。为 0 时禅道会把"开始"当作"完成"并指派回创建人，CLI 会拒绝执行。缺省沿用任务当前剩余 |
 | `--consumed <小时>` | 否 | 本次消耗，缺省 0 |
 | `--real-started <YYYY-MM-DD HH:MM:SS>` | 否 | 实际开始时间，缺省用服务端当前时间 |
-| `--assigned-to <账号>` | 否 | 开始后指派给，缺省不变 |
+| `--assigned-to <账号或姓名>` | 否 | 开始后指派给，缺省不变 |
 | `--comment <备注>` | 否 | 附带评论 |
 
 > 前置条件：仅 wait/pause 状态可开始，否则 CLI 拒绝执行。
@@ -491,7 +495,7 @@ zentao-cli task finish <id> --consumed <本次耗时> [选项...]
 | `<id>` | 是 | 任务 ID |
 | `--consumed <小时>` | 是 | 本次消耗工时，必须 >0 |
 | `--finished-date <YYYY-MM-DD>` | 否 | 完成日期，缺省用服务端当前时间 |
-| `--assigned-to <账号>` | 否 | 完成后指派给，缺省不变 |
+| `--assigned-to <账号或姓名>` | 否 | 完成后指派给，缺省不变 |
 | `--comment <备注>` | 否 | 附带评论 |
 
 > 前置条件：仅 wait/doing 状态可完成。CLI 会自动提交之前的总计消耗作为基线，避免服务端"总计消耗必须大于之前消耗"误报。
@@ -621,7 +625,7 @@ zentao-cli bug create <product> --title <标题> [选项...]
 | `--project <id>` | 否 | 所属项目 ID |
 | `--severity <1-4>` | 否 | 严重程度：1 最高，4 最低 |
 | `--pri <0-4>` | 否 | 优先级 |
-| `--assigned-to <账号>` | 否 | 指派给 |
+| `--assigned-to <账号或姓名>` | 否 | 指派给，姓名支持模糊解析 |
 | `--opened-build <build>` | 否 | 影响版本 |
 | `--deadline <YYYY-MM-DD>` | 否 | 截止日期 |
 | `--keywords <关键词>` | 否 | 关键词 |
@@ -649,7 +653,7 @@ zentao-cli bug edit <id> [选项...]
 | `--steps <步骤>` | 否 | 复现步骤 |
 | `--severity <1-4>` | 否 | 严重程度 |
 | `--pri <0-4>` | 否 | 优先级 |
-| `--assigned-to <账号>` | 否 | 指派人 |
+| `--assigned-to <账号或姓名>` | 否 | 指派人，姓名支持模糊解析 |
 | `--status <status>` | 否 | 状态：active/resolved/closed。仅当显式指定时提交 |
 | `--resolution <方案>` | 否 | 解决方案：fixed/bydesign/duplicate/postponed/willnotfix/notrepro/... |
 | `--resolved-build <build>` | 否 | 解决版本 |
@@ -672,7 +676,7 @@ zentao-cli bug edit 2001 --severity 1 --comment "升级严重程度"
 指派 Bug（通过编辑接口提交 `assignedTo`）。
 
 ```
-zentao-cli bug assign <id> <账号> [--comment <备注>]
+zentao-cli bug assign <id> <账号或姓名> [--comment <备注>]
 ```
 
 ```bash
@@ -693,7 +697,7 @@ zentao-cli bug resolve <id> [选项...]
 | `--resolution <方案>` | 否 | 解决方案：fixed/bydesign/duplicate/postponed/willnotfix/notrepro/... |
 | `--resolved-build <build>` | 否 | 解决版本 |
 | `--build-name <名称>` | 否 | 新建 Build 名称（与 `--resolved-build` 配合） |
-| `--assigned-to <账号>` | 否 | 解决后指派给 |
+| `--assigned-to <账号或姓名>` | 否 | 解决后指派给 |
 | `--comment <备注>` | 否 | 附带评论 |
 
 ```bash
@@ -705,7 +709,7 @@ zentao-cli bug resolve 2001 --resolution fixed --comment "已修复"
 激活 Bug（resolved/closed → active）。
 
 ```
-zentao-cli bug activate <id> [--assigned-to <账号>] [--opened-build <build>] [--comment <备注>]
+zentao-cli bug activate <id> [--assigned-to <账号或姓名>] [--opened-build <build>] [--comment <备注>]
 ```
 
 ```bash
@@ -756,6 +760,40 @@ zentao-cli bug comment <id> --comment <内容>
 ```bash
 zentao-cli bug comment 2001 --comment "和产品确认了，下个版本修"
 ```
+
+---
+
+### 用户
+
+查询禅道用户的「账号 → 真实姓名」映射。写命令的指派人参数支持直接填姓名（见「通用」安全护栏的指派人解析）。
+
+#### user list
+
+列出全部用户。
+
+```
+zentao-cli user list
+```
+
+```bash
+zentao-cli user list
+zentao-cli --format json user list
+```
+
+#### user search
+
+按关键词搜索用户（账号或姓名包含匹配，大小写不敏感）。
+
+```
+zentao-cli user search <关键词>
+```
+
+```bash
+zentao-cli user search 李       # 按姓名（或姓名片段）查账号
+zentao-cli user search zhang    # 按账号片段查
+```
+
+> 数据来自旧版页面响应附带的全量用户映射（主源 `my-task.json`，备源 `project-all-0.json`），普通权限账号即可访问，无需管理员权限。
 
 ## 配置与凭据安全
 

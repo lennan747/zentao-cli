@@ -1,6 +1,8 @@
 pub mod commands;
 pub mod confirm;
 pub mod output;
+pub mod picker;
+pub mod resolve;
 pub mod style;
 
 use std::process::ExitCode;
@@ -37,6 +39,10 @@ pub async fn run() -> ExitCode {
         }
         Commands::Bug(cmd) => {
             run_with_session_recovery(&ctx.profile, || commands::bug::handle(cmd.clone(), &ctx))
+                .await
+        }
+        Commands::User(cmd) => {
+            run_with_session_recovery(&ctx.profile, || commands::user::handle(cmd.clone(), &ctx))
                 .await
         }
         Commands::Update(cmd) => commands::update::handle(cmd, &ctx).await,
