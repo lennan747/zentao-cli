@@ -67,6 +67,7 @@ zentao-cli update [--version vX.Y.Z] [--yes]   # 下载校验后替换当前 exe
 ```
 
 - `update` 不需要登录，也不需要配置；仅支持 Linux x86_64 / macOS arm64 / Windows x86_64。
+- **`update` 命令自 v0.2.0 起提供**：若报 `unrecognized subcommand 'update'`（如用户在 v0.1.1），指引用户重跑一键安装脚本升级（见"前置检查"），升级后即可用 `update`。
 - Windows 下旧 exe 改名为 `zentao-cli.exe.old`；镜像/代理可用 `ZENTAO_CLI_UPDATE_API` / `ZENTAO_CLI_UPDATE_DOWNLOAD` 覆盖 GitHub 地址。
 
 ### 项目（只读）

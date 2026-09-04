@@ -297,6 +297,7 @@ zentao-cli update [--version <版本>] [--repo <owner/repo>] [--check] [--yes] [
 - 默认交互确认（复用写操作的安全护栏：`--dry-run` 只预览、`--yes` 跳过、无 TTY 拒绝）。
 - 只替换当前运行的可执行文件；Windows 下旧文件会先改名为 `zentao-cli.exe.old`（可手动删除）。
 - 支持平台与一键安装一致：Linux x86_64 / macOS arm64 / Windows x86_64。
+- **版本可用性**：`update` 命令自 v0.2.0 起提供。若当前版本报 `unrecognized subcommand 'update'`（如 v0.1.1），请重跑[一键安装脚本](#一键安装推荐)升级到最新版，此后即可用 `update` 自更新。
 - 镜像/代理：可用环境变量 `ZENTAO_CLI_UPDATE_API`（GitHub API 基地址）与 `ZENTAO_CLI_UPDATE_DOWNLOAD`（下载基地址）覆盖默认 GitHub 地址。
 
 ```bash
