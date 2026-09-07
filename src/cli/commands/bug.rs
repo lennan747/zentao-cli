@@ -87,9 +87,9 @@ pub struct CreateArgs {
     #[arg(long)]
     pub pri: Option<String>,
 
-    /// 指派给（账号或姓名，支持模糊解析）
-    #[arg(long)]
-    pub assigned_to: Option<String>,
+    /// 指派给（账号或姓名，支持模糊解析）；旧版接口 Bug 仅支持单人
+    #[arg(long = "assigned-to")]
+    pub assigned_to: Vec<String>,
 
     /// 影响版本 Build
     #[arg(long)]
@@ -270,15 +270,21 @@ fn summary(title: &str, items: &[(&str, &str)]) -> String {
 }
 
 macro_rules! try_write {
-    ($flags:expr, $summary:expr, $call:expr) => {{
-        match confirm_write(&$summary, $flags) {
+    ($ctx:expr, $flags:expr, $summary:expr, $call:expr) => {{
+        match confirm_write(
+            &$summary,
+            $flags,
+            matches!($ctx.format, crate::cli::commands::OutputFormat::Json),
+        ) {
             Ok(WriteControl::Aborted) => return ok(),
             Ok(WriteControl::Proceed) => {}
             Err(e) => return fail(&e),
         }
         match $call.await {
             Ok(()) => {
-                println!("{}", crate::cli::style::green("已提交成功"));
+                if !matches!($ctx.format, crate::cli::commands::OutputFormat::Json) {
+                    println!("{}", crate::cli::style::green("已提交成功"));
+                }
                 ok()
             }
             Err(e) => fail(&e.into()),
@@ -292,6 +298,7 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
         Err(e) => return fail(&e),
     };
     let user_gateway = ZentaoV9UserGateway::new(client.clone());
+    let server = client.server().to_string();
     let gateway = ZentaoV9BugGateway::new(client);
 
     match args.command {
@@ -324,11 +331,22 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
                     crate::domain::QueryError::InvalidParameter("Bug 标题不能为空".into()),
                 ));
             }
-            let assigned = match resolve::assigned_to(&user_gateway, a.assigned_to.as_deref()).await
-            {
-                Ok(v) => v,
-                Err(code) => return code,
-            };
+            let raw_values = super::split_assigned_values(&a.assigned_to);
+            if raw_values.len() > 1 {
+                return fail(&ZentaoError::Query(
+                    crate::domain::QueryError::InvalidParameter(
+                        "旧版接口 Bug 指派仅支持单人：请只指定一人（多人协作请用 task 的多指派人）"
+                            .into(),
+                    ),
+                ));
+            }
+            let assigned =
+                match resolve::assigned_to(&user_gateway, raw_values.first().map(|s| s.as_str()))
+                    .await
+                {
+                    Ok(v) => v,
+                    Err(code) => return code,
+                };
             let assigned_display = assigned
                 .as_ref()
                 .map(|u| u.display.clone())
@@ -367,11 +385,33 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
                     ("openedBuild", draft.opened_build.as_deref().unwrap_or("")),
                 ],
             );
-            try_write!(
+            match confirm_write(
+                &s,
                 a.write,
-                s,
-                gateway.create_bug(EntityId::from(a.product.as_str()), draft.clone())
-            )
+                matches!(ctx.format, crate::cli::commands::OutputFormat::Json),
+            ) {
+                Ok(WriteControl::Aborted) => return ok(),
+                Ok(WriteControl::Proceed) => {}
+                Err(e) => return fail(&e),
+            }
+            match gateway
+                .create_bug(EntityId::from(a.product.as_str()), draft.clone())
+                .await
+            {
+                Ok(id) => {
+                    let url = id.as_ref().map(|id| format!("{server}/bug-view-{id}.html"));
+                    output::print_create_receipt(
+                        "Bug",
+                        &draft.title,
+                        id.as_ref().map(|i| i.0.as_str()),
+                        url.as_deref(),
+                        ctx.format,
+                    )
+                    .map_err(|e| ZentaoError::Internal(e.to_string()))
+                    .map_or_else(|e| fail(&e), |_| ok())
+                }
+                Err(e) => fail(&e.into()),
+            }
         }
         BugCommands::Edit(a) => {
             let assigned = match resolve::assigned_to(&user_gateway, a.assigned_to.as_deref()).await
@@ -431,6 +471,7 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
             let s =
                 format!("{s}  备注：将连当前字段基线一并提交（旧版接口行为，空提交会清空字段）");
             try_write!(
+                ctx,
                 a.write,
                 s,
                 gateway.edit_bug(EntityId::from(a.id.as_str()), edit.clone())
@@ -464,6 +505,7 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
                 ],
             );
             try_write!(
+                ctx,
                 a.write,
                 s,
                 gateway.edit_bug(EntityId::from(a.id.as_str()), edit.clone())
@@ -497,6 +539,7 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
                 ],
             );
             try_write!(
+                ctx,
                 a.write,
                 s,
                 gateway.resolve_bug(EntityId::from(a.id.as_str()), p.clone())
@@ -526,6 +569,7 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
                 ],
             );
             try_write!(
+                ctx,
                 a.write,
                 s,
                 gateway.activate_bug(EntityId::from(a.id.as_str()), p.clone())
@@ -540,6 +584,7 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
                 &[("comment", p.comment.as_deref().unwrap_or(""))],
             );
             try_write!(
+                ctx,
                 a.write,
                 s,
                 gateway.close_bug(EntityId::from(a.id.as_str()), p.clone())
@@ -554,6 +599,7 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
                 &[("comment", p.comment.as_deref().unwrap_or(""))],
             );
             try_write!(
+                ctx,
                 a.write,
                 s,
                 gateway.confirm_bug(EntityId::from(a.id.as_str()), p.clone())
@@ -570,6 +616,7 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
                 &[("comment", a.comment.as_str())],
             );
             try_write!(
+                ctx,
                 a.write,
                 s,
                 gateway.comment_bug(EntityId::from(a.id.as_str()), &a.comment)

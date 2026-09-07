@@ -29,9 +29,22 @@ impl ZentaoV9BugGateway {
 
     /// 提交写表单并解析包络；成功返回 Ok。
     async fn post_write(&self, url: &str, form: Vec<(String, String)>) -> Result<(), QueryError> {
+        self.post_write_locate(url, form).await.map(|_| ())
+    }
+
+    /// 提交写表单并返回响应包络中的 `locate`（成功跳转地址）。
+    async fn post_write_locate(
+        &self,
+        url: &str,
+        form: Vec<(String, String)>,
+    ) -> Result<Option<String>, QueryError> {
         let pairs: Vec<(&str, &str)> = form.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
         let body = self.client.post_form_text(url, &pairs).await?;
-        parse_body(&body).map(|_| ())
+        let data = parse_body(&body)?;
+        Ok(data
+            .get("locate")
+            .and_then(|v| v.as_str())
+            .map(str::to_string))
     }
 
     /// 读取当前 Bug 的影响版本（编辑/激活表单的必填基线）。
@@ -191,7 +204,11 @@ impl BugGateway for ZentaoV9BugGateway {
         Self::detail_from(&data, self.client.server())
     }
 
-    async fn create_bug(&self, product: EntityId, draft: BugDraft) -> Result<(), QueryError> {
+    async fn create_bug(
+        &self,
+        product: EntityId,
+        draft: BugDraft,
+    ) -> Result<Option<EntityId>, QueryError> {
         let mut form = vec![field("title", draft.title)];
         form.extend(optional_fields(vec![
             ("steps", draft.steps),
@@ -211,7 +228,11 @@ impl BugGateway for ZentaoV9BugGateway {
             form.push(field("mailto[]", account));
         }
         let url = Routes::bug_create(self.client.server(), &product.0);
-        self.post_write(&url, form).await
+        let locate = self.post_write_locate(&url, form).await?;
+        Ok(locate
+            .as_deref()
+            .and_then(|l| super::tasks::extract_id(l, "bug-view-"))
+            .map(EntityId::from))
     }
 
     async fn edit_bug(&self, id: EntityId, edit: BugEdit) -> Result<(), QueryError> {

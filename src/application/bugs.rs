@@ -19,7 +19,11 @@ pub trait BugGateway: Send + Sync {
     async fn list_bugs(&self, query: BugQuery) -> Result<Page<BugSummary>, QueryError>;
     async fn get_bug(&self, id: EntityId) -> Result<BugDetail, QueryError>;
 
-    async fn create_bug(&self, product: EntityId, draft: BugDraft) -> Result<(), QueryError>;
+    async fn create_bug(
+        &self,
+        product: EntityId,
+        draft: BugDraft,
+    ) -> Result<Option<EntityId>, QueryError>;
     async fn edit_bug(&self, id: EntityId, edit: BugEdit) -> Result<(), QueryError>;
     async fn resolve_bug(&self, id: EntityId, params: BugResolveParams) -> Result<(), QueryError>;
     async fn activate_bug(&self, id: EntityId, params: BugActivateParams)

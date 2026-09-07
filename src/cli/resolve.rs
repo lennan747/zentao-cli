@@ -100,22 +100,28 @@ pub async fn assigned_to(
     let Some(raw) = raw.map(str::trim).filter(|s| !s.is_empty()) else {
         return Ok(None);
     };
+    one(user_gateway, raw).await.map(Some)
+}
 
+/// 解析单个非空指派人输入（账号或姓名）；多人指派时逐值调用。
+///
+/// `Err(code)` 约定同 [`assigned_to`]（错误已打印，或 TTY 取消）。
+pub async fn one(user_gateway: &ZentaoV9UserGateway, raw: &str) -> Result<ResolvedUser, ExitCode> {
     let users = user_gateway.list_users().await;
     let resolution = match classify(raw, &users) {
         Ok(resolution) => resolution,
         Err(e) => return Err(fail(&e)),
     };
 
-    let resolved = match resolution {
-        Resolution::Passthrough => ResolvedUser {
+    match resolution {
+        Resolution::Passthrough => Ok(ResolvedUser {
             account: raw.to_string(),
             display: raw.to_string(),
-        },
-        Resolution::Unique(user) => ResolvedUser {
+        }),
+        Resolution::Unique(user) => Ok(ResolvedUser {
             account: user.account.clone(),
             display: display_mapping(raw, &user),
-        },
+        }),
         Resolution::Multiple(candidates) => {
             if !std::io::stdin().is_terminal() {
                 return Err(fail(&ZentaoError::Query(QueryError::InvalidParameter(
@@ -132,20 +138,19 @@ pub async fn assigned_to(
             ) {
                 Ok(Some(index)) => {
                     let user = &candidates[index];
-                    ResolvedUser {
+                    Ok(ResolvedUser {
                         account: user.account.clone(),
                         display: display_mapping(raw, user),
-                    }
+                    })
                 }
                 Ok(None) => {
                     eprintln!("{}", style::dim("已取消选择，未提交任何变更"));
-                    return Err(ok());
+                    Err(ok())
                 }
-                Err(e) => return Err(fail(&e)),
+                Err(e) => Err(fail(&e)),
             }
         }
-    };
-    Ok(Some(resolved))
+    }
 }
 
 #[cfg(test)]

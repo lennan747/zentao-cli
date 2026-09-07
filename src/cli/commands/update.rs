@@ -77,7 +77,7 @@ async fn run(args: UpdateArgs) -> Result<(), String> {
             ("下载地址", &format!("{base}/{}", target.asset)),
         ],
     );
-    match confirm_write(&summary, args.write) {
+    match confirm_write(&summary, args.write, false) {
         Ok(WriteControl::Aborted) => return Ok(()),
         Ok(WriteControl::Proceed) => {}
         Err(e) => return Err(e.to_string()),

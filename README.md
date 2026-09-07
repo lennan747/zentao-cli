@@ -405,12 +405,15 @@ zentao-cli task create <project> --name <名称> [选项...]
 | `--est-started <YYYY-MM-DD>` | 否 | 预计开始日期 |
 | `--deadline <YYYY-MM-DD>` | 否 | 截止日期 |
 | `--module <id>` | 否 | 所属模块 ID，0=根 |
-| `--assigned-to <账号或姓名>` | 否 | 指派给，姓名支持模糊解析 |
+| `--assigned-to <账号或姓名>` | 否 | 指派给；多人用逗号分隔或重复本 flag（旧版团队模式）；姓名支持模糊解析 |
+| `--image-url <url>` | 否 | 图片 URL，可重复；以 `<img>` 追加到描述末尾（不走禅道上传）；不可达仅警告不阻断 |
 | `--mailto <账号>` | 否 | 抄送，可多次指定 |
 
 ```bash
 zentao-cli task create 101 --name "修复登录页样式" --pri 2 --assigned-to <你的账号>
 ```
+
+> 创建成功回执：table 格式输出 `已创建任务: <标题>` 与 `链接: <server>/task-view-<id>.html`；json 格式 stdout 输出单对象 `{"id","title","url"}`（响应无法解析出新 ID 时 `id` 为 null）。
 
 #### task edit
 
@@ -626,7 +629,7 @@ zentao-cli bug create <product> --title <标题> [选项...]
 | `--project <id>` | 否 | 所属项目 ID |
 | `--severity <1-4>` | 否 | 严重程度：1 最高，4 最低 |
 | `--pri <0-4>` | 否 | 优先级 |
-| `--assigned-to <账号或姓名>` | 否 | 指派给，姓名支持模糊解析 |
+| `--assigned-to <账号或姓名>` | 否 | 指派给（旧版接口 Bug 仅支持单人）；姓名支持模糊解析 |
 | `--opened-build <build>` | 否 | 影响版本 |
 | `--deadline <YYYY-MM-DD>` | 否 | 截止日期 |
 | `--keywords <关键词>` | 否 | 关键词 |
@@ -638,6 +641,8 @@ zentao-cli bug create <product> --title <标题> [选项...]
 ```bash
 zentao-cli bug create 201 --title "登录页报 500" --severity 2 --assigned-to <你的账号>
 ```
+
+> 创建成功回执同 task（链接为 `bug-view-<id>.html`）。
 
 #### bug edit
 

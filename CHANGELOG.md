@@ -6,6 +6,16 @@
 
 ## [Unreleased]
 
+### 新增
+
+- 创建回执：`task create` / `bug create` 成功后解析写响应 locate，table 格式输出 `已创建任务/Bug: <标题>` 与 Web 链接（`task-view-{id}.html` / `bug-view-{id}.html`），json 格式 stdout 输出单对象 `{"id","title","url"}`（无法解析新 ID 时 `id` 为 null）。
+- 多人指派：`task create --assigned-to` 支持逗号分隔与重复传入（每个值独立姓名解析、去重），以多个 `assignedTo[]` 提交（旧版团队模式）；Bug 指派保持单人，多值输入报错（退出码 6）。
+- 图片嵌入描述：`task create --image-url <url>`（可重复）以 `<img>` 追加到描述末尾，不走禅道上传（适配云存储已满的实例）；提交前 HEAD 探测可达性，不可达仅警告不阻断。
+
+### 变更
+
+- json 格式 stdout 契约收紧：写命令确认摘要与"已提交成功"提示在 `--format json` 下改走 stderr/不输出，stdout 仅保留 create 回执 JSON 对象。
+
 ## [0.2.0] - 2026-09-04
 
 ### 新增

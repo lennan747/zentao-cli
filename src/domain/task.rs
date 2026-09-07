@@ -114,7 +114,8 @@ pub struct TaskDraft {
     pub estimate: Option<String>,
     pub est_started: Option<String>,
     pub deadline: Option<String>,
-    pub assigned_to: Option<String>,
+    /// 指派人账号列表（多人=旧版团队模式）；空表示未指定。
+    pub assigned_to: Vec<String>,
     pub mailto: Vec<String>,
 }
 

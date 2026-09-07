@@ -19,7 +19,11 @@ pub trait TaskGateway: Send + Sync {
     async fn list_tasks(&self, query: TaskQuery) -> Result<Page<TaskSummary>, QueryError>;
     async fn get_task(&self, id: EntityId) -> Result<TaskDetail, QueryError>;
 
-    async fn create_task(&self, project: EntityId, draft: TaskDraft) -> Result<(), QueryError>;
+    async fn create_task(
+        &self,
+        project: EntityId,
+        draft: TaskDraft,
+    ) -> Result<Option<EntityId>, QueryError>;
     async fn edit_task(&self, id: EntityId, edit: TaskEdit) -> Result<(), QueryError>;
     async fn start_task(&self, id: EntityId, params: TaskStartParams) -> Result<(), QueryError>;
     async fn finish_task(&self, id: EntityId, params: TaskFinishParams) -> Result<(), QueryError>;

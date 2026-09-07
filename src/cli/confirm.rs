@@ -29,14 +29,26 @@ pub enum WriteControl {
 /// 2. `--yes`：打印摘要后直接执行；
 /// 3. 交互终端：打印摘要并询问 y/N；
 /// 4. 无终端且没有 `--yes`/`--dry-run`：拒绝执行。
-pub fn confirm_write(summary: &str, flags: WriteFlags) -> Result<WriteControl, ZentaoError> {
-    println!("{summary}");
+///
+/// `json` 为真时摘要与 dry-run 提示输出到 stderr，保持 stdout 为纯 JSON 契约。
+pub fn confirm_write(
+    summary: &str,
+    flags: WriteFlags,
+    json: bool,
+) -> Result<WriteControl, ZentaoError> {
+    if json {
+        eprintln!("{summary}");
+    } else {
+        println!("{summary}");
+    }
 
     if flags.dry_run {
-        println!(
-            "\n{}",
-            style::yellow("[dry-run] 未执行，如需执行去掉 --dry-run")
-        );
+        let note = style::yellow("[dry-run] 未执行，如需执行去掉 --dry-run");
+        if json {
+            eprintln!("\n{note}");
+        } else {
+            println!("\n{note}");
+        }
         return Ok(WriteControl::Aborted);
     }
     if flags.yes {

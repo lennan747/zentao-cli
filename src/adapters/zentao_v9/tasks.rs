@@ -68,6 +68,21 @@ pub(super) fn split_accounts(form: &mut Vec<(String, String)>, name: &str, raw: 
     }
 }
 
+/// 从写响应 locate 中提取新对象 ID（如 `…/task-view-123.json`）；无数字 ID 时返回 None。
+pub(super) fn extract_id(locate: &str, prefix: &str) -> Option<String> {
+    let start = locate.find(prefix)? + prefix.len();
+    let rest = &locate[start..];
+    let end = rest
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(rest.len());
+    let digits = &rest[..end];
+    if digits.is_empty() {
+        None
+    } else {
+        Some(digits.to_string())
+    }
+}
+
 /// 任务查询网关（禅道 V9 旧版 `.json` 接口）。
 ///
 /// 列表数据来自 `/my-task.json`（“我的任务”），服务端分页参数尚未确认，
@@ -83,9 +98,22 @@ impl ZentaoV9TaskGateway {
 
     /// 提交写表单并解析包络；成功返回 Ok。
     async fn post_write(&self, url: &str, form: Vec<(String, String)>) -> Result<(), QueryError> {
+        self.post_write_locate(url, form).await.map(|_| ())
+    }
+
+    /// 提交写表单并返回响应包络中的 `locate`（成功跳转地址，含新对象 ID 的 URL）。
+    async fn post_write_locate(
+        &self,
+        url: &str,
+        form: Vec<(String, String)>,
+    ) -> Result<Option<String>, QueryError> {
         let pairs: Vec<(&str, &str)> = form.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
         let body = self.client.post_form_text(url, &pairs).await?;
-        parse_body(&body).map(|_| ())
+        let data = parse_body(&body)?;
+        Ok(data
+            .get("locate")
+            .and_then(|v| v.as_str())
+            .map(str::to_string))
     }
 
     /// 读取当前任务的原始 JSON（编辑表单的全量基线）。
@@ -190,7 +218,11 @@ impl TaskGateway for ZentaoV9TaskGateway {
         Self::detail_from(&data, self.client.server())
     }
 
-    async fn create_task(&self, project: EntityId, draft: TaskDraft) -> Result<(), QueryError> {
+    async fn create_task(
+        &self,
+        project: EntityId,
+        draft: TaskDraft,
+    ) -> Result<Option<EntityId>, QueryError> {
         let mut form = vec![field("name", draft.name)];
         for (k, v) in optional_fields(vec![
             ("desc", draft.desc),
@@ -200,15 +232,22 @@ impl TaskGateway for ZentaoV9TaskGateway {
             ("estStarted", draft.est_started),
             ("deadline", draft.deadline),
             ("module", draft.module),
-            ("assignedTo[]", draft.assigned_to),
         ]) {
             form.push((k, v));
+        }
+        // 多人 select（旧版团队模式）：每个指派人一个 assignedTo[] 表单字段。
+        for account in &draft.assigned_to {
+            form.push(field("assignedTo[]", account));
         }
         for account in draft.mailto {
             form.push(field("mailto[]", account));
         }
         let url = Routes::task_create(self.client.server(), &project.0);
-        self.post_write(&url, form).await
+        let locate = self.post_write_locate(&url, form).await?;
+        Ok(locate
+            .as_deref()
+            .and_then(|l| extract_id(l, "task-view-"))
+            .map(EntityId::from))
     }
 
     async fn edit_task(&self, id: EntityId, edit: TaskEdit) -> Result<(), QueryError> {

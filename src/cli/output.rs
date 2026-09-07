@@ -673,6 +673,36 @@ pub fn print_user_page(users: &[UserSummary], format: OutputFormat) -> anyhow::R
     Ok(())
 }
 
+/// 创建成功回执：table 输出标题与 Web 链接；json 输出 `{id,title,url}` 单对象（id 可能为 null）。
+pub fn print_create_receipt(
+    kind: &str,
+    title: &str,
+    id: Option<&str>,
+    url: Option<&str>,
+    format: OutputFormat,
+) -> anyhow::Result<()> {
+    match format {
+        OutputFormat::Json => {
+            println!(
+                "{}",
+                serde_json::to_string(&serde_json::json!({
+                    "id": id,
+                    "title": title,
+                    "url": url,
+                }))?
+            );
+        }
+        OutputFormat::Table => {
+            println!("{}", style::green(&format!("已创建{kind}: {title}")));
+            match url {
+                Some(url) => println!("链接: {url}"),
+                None => println!("{}", style::dim("未能从响应解析新对象 ID，请在禅道中查看")),
+            }
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{

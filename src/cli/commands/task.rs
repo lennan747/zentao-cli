@@ -98,9 +98,13 @@ pub struct CreateArgs {
     #[arg(long)]
     pub module: Option<String>,
 
-    /// 指派给（账号或姓名，支持模糊解析）
-    #[arg(long)]
-    pub assigned_to: Option<String>,
+    /// 指派给（账号或姓名）；多人用逗号分隔或重复本 flag（旧版团队模式）
+    #[arg(long = "assigned-to")]
+    pub assigned_to: Vec<String>,
+
+    /// 图片 URL（可重复）；以 <img> 追加到描述末尾（不走禅道上传）
+    #[arg(long = "image-url")]
+    pub image_url: Vec<String>,
 
     /// 抄送账号（可多次）
     #[arg(long)]
@@ -263,15 +267,21 @@ fn summary(title: &str, items: &[(&str, &str)]) -> String {
 }
 
 macro_rules! try_write {
-    ($flags:expr, $summary:expr, $call:expr) => {{
-        match confirm_write(&$summary, $flags) {
+    ($ctx:expr, $flags:expr, $summary:expr, $call:expr) => {{
+        match confirm_write(
+            &$summary,
+            $flags,
+            matches!($ctx.format, crate::cli::commands::OutputFormat::Json),
+        ) {
             Ok(WriteControl::Aborted) => return ok(),
             Ok(WriteControl::Proceed) => {}
             Err(e) => return fail(&e),
         }
         match $call.await {
             Ok(()) => {
-                println!("{}", crate::cli::style::green("已提交成功"));
+                if !matches!($ctx.format, crate::cli::commands::OutputFormat::Json) {
+                    println!("{}", crate::cli::style::green("已提交成功"));
+                }
                 ok()
             }
             Err(e) => fail(&e.into()),
@@ -285,6 +295,7 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
         Err(e) => return fail(&e),
     };
     let user_gateway = ZentaoV9UserGateway::new(client.clone());
+    let server = client.server().to_string();
     let gateway = ZentaoV9TaskGateway::new(client);
 
     match args.command {
@@ -317,25 +328,42 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
                     ));
                 }
             }
-            let assigned = match resolve::assigned_to(&user_gateway, a.assigned_to.as_deref()).await
-            {
-                Ok(v) => v,
-                Err(code) => return code,
-            };
-            let assigned_display = assigned
-                .as_ref()
-                .map(|u| u.display.clone())
-                .unwrap_or_default();
+            let mut resolved: Vec<resolve::ResolvedUser> = Vec::new();
+            for raw in super::split_assigned_values(&a.assigned_to) {
+                let user = match resolve::one(&user_gateway, &raw).await {
+                    Ok(u) => u,
+                    Err(code) => return code,
+                };
+                if !resolved.iter().any(|r| r.account == user.account) {
+                    resolved.push(user);
+                }
+            }
+            for url in &a.image_url {
+                if !crate::infrastructure::http::url_reachable(url).await {
+                    eprintln!(
+                        "{}",
+                        crate::cli::style::dim(&format!(
+                            "warning: 图片 URL 可能不可达（HEAD 探测失败），仍按原样嵌入: {url}"
+                        ))
+                    );
+                }
+            }
+            let desc = compose_desc(a.desc.as_deref(), &a.image_url);
+            let assigned_display = resolved
+                .iter()
+                .map(|u| u.display.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
             let draft = TaskDraft {
                 name: a.name.clone(),
-                desc: a.desc.clone(),
+                desc,
                 module: a.module.clone(),
                 task_type: a.r#type.clone(),
                 pri: a.pri.clone(),
                 estimate: a.estimate.clone(),
                 est_started: a.est_started.clone(),
                 deadline: a.deadline.clone(),
-                assigned_to: assigned.map(|u| u.account),
+                assigned_to: resolved.iter().map(|u| u.account.clone()).collect(),
                 mailto: a.mailto.clone(),
             };
             let s = summary(
@@ -352,11 +380,35 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
                     ("assignedTo", assigned_display.as_str()),
                 ],
             );
-            try_write!(
+            match confirm_write(
+                &s,
                 a.write,
-                s,
-                gateway.create_task(EntityId::from(a.project.as_str()), draft.clone())
-            )
+                matches!(ctx.format, crate::cli::commands::OutputFormat::Json),
+            ) {
+                Ok(WriteControl::Aborted) => return ok(),
+                Ok(WriteControl::Proceed) => {}
+                Err(e) => return fail(&e),
+            }
+            match gateway
+                .create_task(EntityId::from(a.project.as_str()), draft.clone())
+                .await
+            {
+                Ok(id) => {
+                    let url = id
+                        .as_ref()
+                        .map(|id| format!("{server}/task-view-{id}.html"));
+                    output::print_create_receipt(
+                        "任务",
+                        &draft.name,
+                        id.as_ref().map(|i| i.0.as_str()),
+                        url.as_deref(),
+                        ctx.format,
+                    )
+                    .map_err(|e| ZentaoError::Internal(e.to_string()))
+                    .map_or_else(|e| fail(&e), |_| ok())
+                }
+                Err(e) => fail(&e.into()),
+            }
         }
         TaskCommands::Edit(a) => {
             // 编辑至少要提供一个字段，避免无意义提交。
@@ -408,6 +460,7 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
             let s =
                 format!("{s}  备注：将连当前字段基线一并提交（旧版接口行为，空提交会清空字段）");
             try_write!(
+                ctx,
                 a.write,
                 s,
                 gateway.edit_task(EntityId::from(a.id.as_str()), edit.clone())
@@ -441,6 +494,7 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
                 ],
             );
             try_write!(
+                ctx,
                 a.write,
                 s,
                 gateway.edit_task(EntityId::from(a.id.as_str()), edit.clone())
@@ -511,7 +565,7 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
                     ("comment", p.comment.as_deref().unwrap_or("")),
                 ],
             );
-            try_write!(a.write, s, gateway.start_task(id, p.clone()))
+            try_write!(ctx, a.write, s, gateway.start_task(id, p.clone()))
         }
         TaskCommands::Finish(a) => {
             let id = EntityId::from(a.id.as_str());
@@ -571,7 +625,7 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
                     ("comment", p.comment.as_deref().unwrap_or("")),
                 ],
             );
-            try_write!(a.write, s, gateway.finish_task(id, p.clone()))
+            try_write!(ctx, a.write, s, gateway.finish_task(id, p.clone()))
         }
         TaskCommands::Cancel(a) => {
             let id = EntityId::from(a.id.as_str());
@@ -597,7 +651,7 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
                 &format!("取消任务 {}（当前状态: {status}）", a.id),
                 &[("comment", p.comment.as_deref().unwrap_or(""))],
             );
-            try_write!(a.write, s, gateway.cancel_task(id, p.clone()))
+            try_write!(ctx, a.write, s, gateway.cancel_task(id, p.clone()))
         }
         TaskCommands::Close(a) => {
             let id = EntityId::from(a.id.as_str());
@@ -620,7 +674,7 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
                 &format!("关闭任务 {}（当前状态: {status}）", a.id),
                 &[("comment", p.comment.as_deref().unwrap_or(""))],
             );
-            try_write!(a.write, s, gateway.close_task(id, p.clone()))
+            try_write!(ctx, a.write, s, gateway.close_task(id, p.clone()))
         }
         TaskCommands::Activate(a) => {
             let id = EntityId::from(a.id.as_str());
@@ -646,7 +700,7 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
                 &format!("激活任务 {}（当前状态: {status}）", a.id),
                 &[("comment", p.comment.as_deref().unwrap_or(""))],
             );
-            try_write!(a.write, s, gateway.activate_task(id, p.clone()))
+            try_write!(ctx, a.write, s, gateway.activate_task(id, p.clone()))
         }
         TaskCommands::Comment(a) => {
             if a.comment.trim().is_empty() {
@@ -659,6 +713,7 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
                 &[("comment", a.comment.as_str())],
             );
             try_write!(
+                ctx,
                 a.write,
                 s,
                 gateway.comment_task(EntityId::from(a.id.as_str()), &a.comment)
@@ -680,4 +735,42 @@ fn all_none(edit: &TaskEdit) -> bool {
         && edit.deadline.is_none()
         && edit.est_started.is_none()
         && edit.comment.is_none()
+}
+
+/// 把图片 URL 以 `<img>` 行追加到描述末尾；URL 内双引号转义，避免破坏 desc 结构。
+fn compose_desc(desc: Option<&str>, image_urls: &[String]) -> Option<String> {
+    if image_urls.is_empty() {
+        return desc.map(str::to_string);
+    }
+    let mut out = desc.unwrap_or_default().to_string();
+    for url in image_urls {
+        if !out.is_empty() {
+            out.push('\n');
+        }
+        out.push_str(&format!("<img src=\"{}\" />", url.replace('"', "&quot;")));
+    }
+    Some(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compose_desc_appends_img_lines_and_escapes_quotes() {
+        assert_eq!(compose_desc(None, &[]), None);
+        assert_eq!(compose_desc(Some("描述"), &[]).as_deref(), Some("描述"));
+        let urls = vec![
+            "https://x/a.png".to_string(),
+            "https://x/b\".png".to_string(),
+        ];
+        assert_eq!(
+            compose_desc(Some("描述"), &urls).as_deref(),
+            Some("描述\n<img src=\"https://x/a.png\" />\n<img src=\"https://x/b&quot;.png\" />")
+        );
+        assert_eq!(
+            compose_desc(None, &urls[..1]).as_deref(),
+            Some("<img src=\"https://x/a.png\" />")
+        );
+    }
 }

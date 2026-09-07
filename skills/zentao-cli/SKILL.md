@@ -89,7 +89,7 @@ zentao-cli task get <id>
 zentao-cli task create <项目ID> --name <名称> \
   [--desc 描述] [--pri 1-4] [--type design|devel|test|study|discuss|ui|affair|misc|production|management] \
   [--estimate 小时] [--est-started YYYY-MM-DD] [--deadline YYYY-MM-DD] \
-  [--module 模块ID] [--assigned-to 账号或姓名] [--mailto 账号]... 
+  [--module 模块ID] [--assigned-to 账号或姓名[,账号或姓名...]] [--image-url URL]... [--mailto 账号]... 
 zentao-cli task edit <id> [--name] [--desc] [--assigned-to] [--pri 0-4] [--type] \
   [--status wait|doing|done|pause|cancel|closed] [--estimate] [--consumed] [--left] \
   [--deadline] [--est-started] [--comment]
@@ -139,6 +139,9 @@ zentao-cli bug comment <id> <内容>
 3. **向用户展示摘要并征得明确确认**后，才去掉 `--dry-run` 执行。
 4. **不得在未经用户同意时使用 `--yes`**。写命令默认交互确认；无 TTY 时会拒绝执行（除非 `--yes`）。
 5. 编辑会连同当前对象全部字段基线一并提交（旧版接口对未提交字段按空值处理），**务必先 get 再 edit**。
+6. **create 回执**：`--format json` 下 create 成功时 stdout 为单对象 `{"id","title","url"}`（id 可能为 null）——把 `url` 直接发给用户作为任务/Bug 链接；table 格式回执在 stdout 文本里。
+7. **多人指派**：task create 的 `--assigned-to` 支持逗号分隔/重复（旧版团队模式）；Bug 仅单人，多值会报错（码 6）。
+8. **图片进描述**：禅道云存储可能已满（上传报"超出空间限制"）——不要走禅道上传，用 `--image-url <外部可访问URL>`（可重复）把图片嵌入描述；CLI 会 HEAD 探测并在不可达时警告。
 
 ### 指派人解析（账号或姓名）
 - 写命令的指派人参数（`--assigned-to` / `assign <位置参数>`）可填**账号或姓名**：账号精确 → 姓名精确 → 账号/姓名包含匹配（大小写不敏感）。

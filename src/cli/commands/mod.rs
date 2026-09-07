@@ -77,6 +77,20 @@ pub fn ok() -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// 拆分 `--assigned-to` 取值：支持逗号分隔与重复传入；trim、去空、去重保序。
+pub fn split_assigned_values(values: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for value in values {
+        for part in value.split(',') {
+            let part = part.trim();
+            if !part.is_empty() && !out.iter().any(|x| x == part) {
+                out.push(part.to_string());
+            }
+        }
+    }
+    out
+}
+
 /// 报告错误并返回对应退出码。
 pub fn fail(err: &ZentaoError) -> ExitCode {
     crate::cli::report_error(err);

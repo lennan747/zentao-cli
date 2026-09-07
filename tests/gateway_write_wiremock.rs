@@ -428,17 +428,46 @@ async fn task_create_posts_form_fields() {
         .await;
 
     let gateway = ZentaoV9TaskGateway::new(client(&server).await);
-    gateway
+    let id = gateway
         .create_task(
             EntityId::from("43"),
             TaskDraft {
                 name: "test-task".into(),
-                assigned_to: Some("demo-user".into()),
+                assigned_to: vec!["demo-user".into()],
                 ..Default::default()
             },
         )
         .await
         .expect("create should succeed");
+    // locate 指向列表页（无对象 ID）→ None。
+    assert_eq!(id, None);
+}
+
+#[tokio::test]
+async fn task_create_posts_multiple_assigned_to_and_parses_new_id() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/task-create-43.json"))
+        .and(body_string_contains("assignedTo%5B%5D=demo-user"))
+        .and(body_string_contains("assignedTo%5B%5D=wangli"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(locate("/task-view-999.json")))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let gateway = ZentaoV9TaskGateway::new(client(&server).await);
+    let id = gateway
+        .create_task(
+            EntityId::from("43"),
+            TaskDraft {
+                name: "test-task".into(),
+                assigned_to: vec!["demo-user".into(), "wangli".into()],
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("create should succeed");
+    assert_eq!(id, Some(EntityId::from("999")));
 }
 
 #[tokio::test]
@@ -479,7 +508,7 @@ async fn bug_create_posts_form_fields() {
         .await;
 
     let gateway = ZentaoV9BugGateway::new(client(&server).await);
-    gateway
+    let id = gateway
         .create_bug(
             EntityId::from("10"),
             BugDraft {
@@ -490,6 +519,32 @@ async fn bug_create_posts_form_fields() {
         )
         .await
         .expect("create should succeed");
+    assert_eq!(id, None);
+}
+
+#[tokio::test]
+async fn bug_create_parses_new_id_from_locate() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/bug-create-10-0-0.json"))
+        .and(body_string_contains("title=test-bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(locate("/bug-view-555.json")))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let gateway = ZentaoV9BugGateway::new(client(&server).await);
+    let id = gateway
+        .create_bug(
+            EntityId::from("10"),
+            BugDraft {
+                title: "test-bug".into(),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("create should succeed");
+    assert_eq!(id, Some(EntityId::from("555")));
 }
 
 #[tokio::test]
