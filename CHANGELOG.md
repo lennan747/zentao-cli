@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-08
+
 ### 新增
 
 - 创建回执：`task create` / `bug create` 成功后解析写响应 locate，table 格式输出 `已创建任务/Bug: <标题>` 与 Web 链接（`task-view-{id}.html` / `bug-view-{id}.html`），json 格式 stdout 输出单对象 `{"id","title","url"}`（无法解析新 ID 时 `id` 为 null）。
@@ -59,7 +61,8 @@
 - CI 与发布：GitHub Actions 门禁 + tag 触发发布多平台二进制与 `SHA256SUMS`。
 - 一键安装：`install.sh`（下载 + SHA256 校验 + 安装到 `~/.local/bin`）。
 
-[Unreleased]: https://github.com/lennan747/zentao-cli/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/lennan747/zentao-cli/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/lennan747/zentao-cli/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/lennan747/zentao-cli/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/lennan747/zentao-cli/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/lennan747/zentao-cli/releases/tag/v0.1.0
