@@ -413,7 +413,7 @@ zentao-cli task create <project> --name <名称> [选项...]
 zentao-cli task create 101 --name "修复登录页样式" --pri 2 --assigned-to <你的账号>
 ```
 
-> 创建成功回执：table 格式输出 `已创建任务: <标题>` 与 `链接: <server>/task-view-<id>.html`；json 格式 stdout 输出单对象 `{"id","title","url"}`（响应无法解析出新 ID 时 `id` 为 null）。
+> 创建成功回执（两行）：table 格式第一行 `<id>: <标题>`、第二行 Web 链接 `<server>/task-view-<id>.html`（id 用原始数字、不补零，与链接一致）；json 格式 stdout 输出单对象 `{"id","title","url"}`（响应无法解析出新 ID 时 `id` 为 null，table 降级为标题 + 提示）。
 
 #### task edit
 

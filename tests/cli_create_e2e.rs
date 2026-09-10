@@ -104,7 +104,7 @@ async fn create_yes_prints_receipt_with_link() {
         ])
         .assert()
         .success()
-        .stdout(predicates::str::contains("已创建任务: 回执任务"))
+        .stdout(predicates::str::contains("999: 回执任务"))
         .stdout(predicates::str::contains("task-view-999.html"));
 }
 

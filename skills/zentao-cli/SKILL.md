@@ -139,7 +139,15 @@ zentao-cli bug comment <id> <内容>
 3. **向用户展示摘要并征得明确确认**后，才去掉 `--dry-run` 执行。
 4. **不得在未经用户同意时使用 `--yes`**。写命令默认交互确认；无 TTY 时会拒绝执行（除非 `--yes`）。
 5. 编辑会连同当前对象全部字段基线一并提交（旧版接口对未提交字段按空值处理），**务必先 get 再 edit**。
-6. **create 回执**：`--format json` 下 create 成功时 stdout 为单对象 `{"id","title","url"}`（id 可能为 null）——把 `url` 直接发给用户作为任务/Bug 链接；table 格式回执在 stdout 文本里。
+6. **create 回执（创建成功后必须给）**：`task create` / `bug create` 成功后，按固定**两行**格式把回执发给用户——第一行 `{id}: {标题}`，第二行 Web 链接 `{url}`：
+   ```text
+   1003: 阅达教育【首页-热销书单】文案调整
+   https://<server>/task-view-1003.html
+   ```
+   - `--format json` 下 stdout 为单对象 `{"id","title","url"}`，直接用其中字段拼出上述两行；**id 用原始数字、不补零**，第一行的 id 与第二行 url 里的 `task-view-{id}` / `bug-view-{id}` 是同一个数字。
+   - `id` 为 null（响应未解析出新 ID）时，只给标题并说明「未获取到 ID，请在禅道中查看」。
+   - table 格式下 CLI 已按这两行打印（首行绿色 `{id}: {标题}`，次行 `{url}`），原样转给用户即可。
+   - task 与 bug 回执格式一致。
 7. **多人指派**：task create 的 `--assigned-to` 支持逗号分隔/重复（旧版团队模式）；Bug 仅单人，多值会报错（码 6）。
 8. **图片进描述**：禅道云存储可能已满（上传报"超出空间限制"）——不要走禅道上传，用 `--image-url <外部可访问URL>`（可重复）把图片嵌入描述；CLI 会 HEAD 探测并在不可达时警告。
 
