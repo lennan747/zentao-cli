@@ -276,3 +276,172 @@ async fn create_image_url_embeds_desc_and_warns_when_unreachable() {
         .stderr(predicates::str::contains(&bad_url))
         .stderr(predicates::str::contains(&ok_url).not());
 }
+
+#[tokio::test]
+async fn create_resolves_mailto_names_in_summary_and_form() {
+    let server = MockServer::start().await;
+    mount_users(&server).await;
+    Mock::given(method("POST"))
+        .and(path("/task-create-43.json"))
+        .and(body_string_contains("mailto%5B%5D=wangli"))
+        .and(body_string_contains("mailto%5B%5D=zhangsan"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_string(wrap_locate("/task-view-999.json")),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    let home = TempDir::new().unwrap();
+    seed_session(&home, &server.uri());
+
+    // dry-run 摘要展示抄送姓名映射，且不提交。
+    zentao(&home)
+        .args([
+            "task",
+            "create",
+            "43",
+            "--name",
+            "抄送任务",
+            "--mailto",
+            "王力,张三",
+            "--dry-run",
+        ])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("王力 → wangli（王力）"))
+        .stdout(predicates::str::contains("张三 → zhangsan（张三）"));
+    let requests = server.received_requests().await.unwrap();
+    assert!(requests.iter().all(|r| r.method == reqwest::Method::GET));
+
+    // 提交时抄送以解析后账号进表单。
+    zentao(&home)
+        .args([
+            "task",
+            "create",
+            "43",
+            "--name",
+            "抄送任务",
+            "--mailto",
+            "王力,张三",
+            "--yes",
+        ])
+        .assert()
+        .success();
+}
+
+#[tokio::test]
+async fn create_multi_assignee_posts_team_fields() {
+    let server = MockServer::start().await;
+    mount_users(&server).await;
+    Mock::given(method("POST"))
+        .and(path("/task-create-43.json"))
+        .and(body_string_contains("multiple=1"))
+        .and(body_string_contains("team%5B%5D=wangli"))
+        .and(body_string_contains("team%5B%5D=wanglinan"))
+        .and(body_string_contains("teamEstimate%5B%5D=0"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_string(wrap_locate("/task-view-999.json")),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    let home = TempDir::new().unwrap();
+    seed_session(&home, &server.uri());
+
+    zentao(&home)
+        .args([
+            "task",
+            "create",
+            "43",
+            "--name",
+            "团队任务",
+            "--assigned-to",
+            "王力,王李男",
+            "--yes",
+        ])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("999: 团队任务"));
+}
+
+#[tokio::test]
+async fn create_mailto_dedupe_account_and_name() {
+    let server = MockServer::start().await;
+    mount_users(&server).await;
+    Mock::given(method("POST"))
+        .and(path("/task-create-43.json"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_string(wrap_locate("/task-view-999.json")),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    let home = TempDir::new().unwrap();
+    seed_session(&home, &server.uri());
+
+    zentao(&home)
+        .args([
+            "task",
+            "create",
+            "43",
+            "--name",
+            "去重抄送",
+            "--mailto",
+            "wangli,王力",
+            "--yes",
+        ])
+        .assert()
+        .success();
+
+    let requests = server.received_requests().await.unwrap();
+    let post = requests
+        .iter()
+        .find(|r| r.method == reqwest::Method::POST)
+        .unwrap();
+    let body = String::from_utf8_lossy(&post.body);
+    assert_eq!(body.matches("mailto%5B%5D=wangli").count(), 1);
+}
+
+#[tokio::test]
+async fn bug_create_resolves_mailto() {
+    let server = MockServer::start().await;
+    mount_users(&server).await;
+    Mock::given(method("POST"))
+        .and(path("/bug-create-10-0-0.json"))
+        .and(body_string_contains("mailto%5B%5D=wangli"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(wrap_locate("/bug-view-88.json")))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let home = TempDir::new().unwrap();
+    seed_session(&home, &server.uri());
+
+    zentao(&home)
+        .args([
+            "bug",
+            "create",
+            "10",
+            "--title",
+            "抄送Bug",
+            "--mailto",
+            "王力",
+            "--dry-run",
+        ])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("王力 → wangli（王力）"));
+
+    zentao(&home)
+        .args([
+            "bug",
+            "create",
+            "10",
+            "--title",
+            "抄送Bug",
+            "--mailto",
+            "王力",
+            "--yes",
+        ])
+        .assert()
+        .success();
+}

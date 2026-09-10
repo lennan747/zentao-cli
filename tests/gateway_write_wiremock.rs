@@ -422,6 +422,8 @@ async fn task_create_posts_form_fields() {
         .and(path("/task-create-43.json"))
         .and(body_string_contains("name=test-task"))
         .and(body_string_contains("assignedTo%5B%5D=demo-user"))
+        .and(NotContains("multiple=".to_string()))
+        .and(NotContains("team%5B%5D=".to_string()))
         .respond_with(ResponseTemplate::new(200).set_body_string(locate("/my-task.json")))
         .expect(1)
         .mount(&server)
@@ -450,6 +452,10 @@ async fn task_create_posts_multiple_assigned_to_and_parses_new_id() {
         .and(path("/task-create-43.json"))
         .and(body_string_contains("assignedTo%5B%5D=demo-user"))
         .and(body_string_contains("assignedTo%5B%5D=wangli"))
+        .and(body_string_contains("multiple=1"))
+        .and(body_string_contains("team%5B%5D=demo-user"))
+        .and(body_string_contains("teamEstimate%5B%5D=0"))
+        .and(body_string_contains("team%5B%5D=wangli"))
         .respond_with(ResponseTemplate::new(200).set_body_string(locate("/task-view-999.json")))
         .expect(1)
         .mount(&server)
@@ -462,6 +468,33 @@ async fn task_create_posts_multiple_assigned_to_and_parses_new_id() {
             TaskDraft {
                 name: "test-task".into(),
                 assigned_to: vec!["demo-user".into(), "wangli".into()],
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("create should succeed");
+    assert_eq!(id, Some(EntityId::from("999")));
+}
+
+#[tokio::test]
+async fn task_create_posts_mailto_per_account() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/task-create-43.json"))
+        .and(body_string_contains("mailto%5B%5D=user1"))
+        .and(body_string_contains("mailto%5B%5D=user2"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(locate("/task-view-999.json")))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let gateway = ZentaoV9TaskGateway::new(client(&server).await);
+    let id = gateway
+        .create_task(
+            EntityId::from("43"),
+            TaskDraft {
+                name: "test-task".into(),
+                mailto: vec!["user1".into(), "user2".into()],
                 ..Default::default()
             },
         )

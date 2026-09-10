@@ -153,6 +153,31 @@ pub async fn one(user_gateway: &ZentaoV9UserGateway, raw: &str) -> Result<Resolv
     }
 }
 
+/// 逐值解析多个输入（逗号拆分由调用方完成）；结果按账号去重保序。
+///
+/// `Err(code)` 约定同 [`one`]。
+pub async fn many(
+    user_gateway: &ZentaoV9UserGateway,
+    values: &[String],
+) -> Result<Vec<ResolvedUser>, ExitCode> {
+    let mut resolved = Vec::new();
+    for raw in values {
+        resolved.push(one(user_gateway, raw).await?);
+    }
+    Ok(dedupe_by_account(resolved))
+}
+
+/// 按账号去重、保持首次出现顺序。
+fn dedupe_by_account(users: Vec<ResolvedUser>) -> Vec<ResolvedUser> {
+    let mut out: Vec<ResolvedUser> = Vec::new();
+    for user in users {
+        if !out.iter().any(|u| u.account == user.account) {
+            out.push(user);
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -231,5 +256,29 @@ mod tests {
             format_candidates(&[user("wangli", "王力"), user("admin", "")]),
             "wangli（王力）、admin"
         );
+    }
+
+    #[test]
+    fn dedupe_by_account_keeps_first_occurrence_order() {
+        let input = vec![
+            ResolvedUser {
+                account: "wangli".into(),
+                display: "王力 → wangli（王力）".into(),
+            },
+            ResolvedUser {
+                account: "wanglinan".into(),
+                display: "wanglinan".into(),
+            },
+            ResolvedUser {
+                account: "wangli".into(),
+                display: "wangli".into(),
+            },
+        ];
+        let out = dedupe_by_account(input);
+        assert_eq!(
+            out.iter().map(|u| u.account.as_str()).collect::<Vec<_>>(),
+            vec!["wangli", "wanglinan"]
+        );
+        assert_eq!(out[0].display, "王力 → wangli（王力）");
     }
 }

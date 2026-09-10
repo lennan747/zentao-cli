@@ -115,7 +115,7 @@ pub struct CreateArgs {
     #[arg(long)]
     pub browser: Option<String>,
 
-    /// 抄送账号（可多次）
+    /// 抄送（账号或姓名）；多人用逗号分隔或重复本 flag
     #[arg(long)]
     pub mailto: Vec<String>,
 
@@ -351,6 +351,17 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
                 .as_ref()
                 .map(|u| u.display.clone())
                 .unwrap_or_default();
+            let cc = match resolve::many(&user_gateway, &super::split_assigned_values(&a.mailto))
+                .await
+            {
+                Ok(v) => v,
+                Err(code) => return code,
+            };
+            let cc_display = cc
+                .iter()
+                .map(|u| u.display.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
             let draft = BugDraft {
                 title: a.title.clone(),
                 steps: a.steps.clone(),
@@ -365,7 +376,7 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
                 bug_type: a.r#type.clone(),
                 os: a.os.clone(),
                 browser: a.browser.clone(),
-                mailto: a.mailto.clone(),
+                mailto: cc.iter().map(|u| u.account.clone()).collect(),
             };
             let s = summary(
                 &format!("创建 Bug（产品 {}）", a.product),
@@ -382,6 +393,7 @@ pub async fn handle(args: BugArgs, ctx: &CommandContext) -> ExitCode {
                     ("module", draft.module.as_deref().unwrap_or("")),
                     ("project", draft.project.as_deref().unwrap_or("")),
                     ("assignedTo", assigned_display.as_str()),
+                    ("mailto", cc_display.as_str()),
                     ("openedBuild", draft.opened_build.as_deref().unwrap_or("")),
                 ],
             );

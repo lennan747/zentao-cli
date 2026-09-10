@@ -106,7 +106,7 @@ pub struct CreateArgs {
     #[arg(long = "image-url")]
     pub image_url: Vec<String>,
 
-    /// 抄送账号（可多次）
+    /// 抄送（账号或姓名）；多人用逗号分隔或重复本 flag
     #[arg(long)]
     pub mailto: Vec<String>,
 
@@ -328,16 +328,19 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
                     ));
                 }
             }
-            let mut resolved: Vec<resolve::ResolvedUser> = Vec::new();
-            for raw in super::split_assigned_values(&a.assigned_to) {
-                let user = match resolve::one(&user_gateway, &raw).await {
-                    Ok(u) => u,
+            let resolved =
+                match resolve::many(&user_gateway, &super::split_assigned_values(&a.assigned_to))
+                    .await
+                {
+                    Ok(v) => v,
                     Err(code) => return code,
                 };
-                if !resolved.iter().any(|r| r.account == user.account) {
-                    resolved.push(user);
-                }
-            }
+            let cc = match resolve::many(&user_gateway, &super::split_assigned_values(&a.mailto))
+                .await
+            {
+                Ok(v) => v,
+                Err(code) => return code,
+            };
             for url in &a.image_url {
                 if !crate::infrastructure::http::url_reachable(url).await {
                     eprintln!(
@@ -354,6 +357,11 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
                 .map(|u| u.display.as_str())
                 .collect::<Vec<_>>()
                 .join(", ");
+            let cc_display = cc
+                .iter()
+                .map(|u| u.display.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
             let draft = TaskDraft {
                 name: a.name.clone(),
                 desc,
@@ -364,7 +372,7 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
                 est_started: a.est_started.clone(),
                 deadline: a.deadline.clone(),
                 assigned_to: resolved.iter().map(|u| u.account.clone()).collect(),
-                mailto: a.mailto.clone(),
+                mailto: cc.iter().map(|u| u.account.clone()).collect(),
             };
             let s = summary(
                 &format!("创建任务（项目 {}）", a.project),
@@ -378,6 +386,7 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
                     ("deadline", draft.deadline.as_deref().unwrap_or("")),
                     ("module", draft.module.as_deref().unwrap_or("")),
                     ("assignedTo", assigned_display.as_str()),
+                    ("mailto", cc_display.as_str()),
                 ],
             );
             match confirm_write(

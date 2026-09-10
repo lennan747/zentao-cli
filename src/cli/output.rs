@@ -226,6 +226,7 @@ fn field_label(key: &str) -> &str {
         "begin" => "开始日期",
         "end" => "结束日期",
         "assignedTo" | "assigned_to" => "指派给",
+        "mailto" => "抄送",
         "account" => "账号",
         "realname" => "姓名",
         "realStarted" => "实际开始时间",
@@ -779,6 +780,7 @@ mod tests {
     fn field_label_maps_known_keys_and_falls_back() {
         assert_eq!(field_label("assignedTo"), "指派给");
         assert_eq!(field_label("assigned_to"), "指派给");
+        assert_eq!(field_label("mailto"), "抄送");
         assert_eq!(field_label("project_name"), "项目");
         assert_eq!(field_label("consumed（基线）"), "消耗工时（基线）");
         assert_eq!(field_label("realStarted"), "实际开始时间");

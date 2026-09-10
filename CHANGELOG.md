@@ -6,9 +6,14 @@
 
 ## [Unreleased]
 
+### 新增
+
+- 多人任务落库：`task create --assigned-to` 给多人时按旧版团队模式提交（`multiple=1` + 每成员 `team[]`/`teamEstimate[]`，每人预计工时默认 0），禅道中落为多人任务；单人提交不变。
+
 ### 变更
 
 - 创建回执 table 格式调整为两行：第一行 `{id}: {标题}`、第二行 Web 链接 `{url}`（原为 `已创建任务/Bug: <标题>` + `链接: <url>`）；id 用原始数字、不补零，与 url 里的 `task-view-{id}` / `bug-view-{id}` 一致。json 输出单对象 `{"id","title","url"}` 不变；无法解析新 ID 时降级为标题 + 提示。
+- 抄送解析：`task create` / `bug create` 的 `--mailto` 支持逗号分隔与重复传入，并按与指派相同的规则做姓名→账号解析；确认摘要新增「抄送」行展示映射。
 
 ## [0.2.1] - 2026-09-08
 

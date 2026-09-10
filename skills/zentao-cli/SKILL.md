@@ -89,7 +89,7 @@ zentao-cli task get <id>
 zentao-cli task create <项目ID> --name <名称> \
   [--desc 描述] [--pri 1-4] [--type design|devel|test|study|discuss|ui|affair|misc|production|management] \
   [--estimate 小时] [--est-started YYYY-MM-DD] [--deadline YYYY-MM-DD] \
-  [--module 模块ID] [--assigned-to 账号或姓名[,账号或姓名...]] [--image-url URL]... [--mailto 账号]... 
+  [--module 模块ID] [--assigned-to 账号或姓名[,账号或姓名...]] [--image-url URL]... [--mailto 账号或姓名[,账号或姓名...]]... 
 zentao-cli task edit <id> [--name] [--desc] [--assigned-to] [--pri 0-4] [--type] \
   [--status wait|doing|done|pause|cancel|closed] [--estimate] [--consumed] [--left] \
   [--deadline] [--est-started] [--comment]
@@ -148,8 +148,9 @@ zentao-cli bug comment <id> <内容>
    - `id` 为 null（响应未解析出新 ID）时，只给标题并说明「未获取到 ID，请在禅道中查看」。
    - table 格式下 CLI 已按这两行打印（首行绿色 `{id}: {标题}`，次行 `{url}`），原样转给用户即可。
    - task 与 bug 回执格式一致。
-7. **多人指派**：task create 的 `--assigned-to` 支持逗号分隔/重复（旧版团队模式）；Bug 仅单人，多值会报错（码 6）。
+7. **多人指派**：task create 的 `--assigned-to` 支持逗号分隔/重复；给多人时 CLI 按旧版团队模式提交（`multiple=1` + 每成员 `team[]`/`teamEstimate[]`，每人预计工时 0），禅道落为多人任务；改成员或工时请用禅道页面（CLI 不做团队编辑）。Bug 仅单人，多值会报错（码 6）。
 8. **图片进描述**：禅道云存储可能已满（上传报"超出空间限制"）——不要走禅道上传，用 `--image-url <外部可访问URL>`（可重复）把图片嵌入描述；CLI 会 HEAD 探测并在不可达时警告。
+9. **自然语言建任务**：用户描述里常含「指派给：A、B、C；抄送给 D、E；要求今天内完成」——把指派给/抄送给的姓名逐个填入 `--assigned-to` / `--mailto`（逗号分隔，CLI 逐个解析姓名→账号），把相对日期换算成 `--deadline YYYY-MM-DD`（"今天内完成"= 当天）；先用 `--dry-run` 把全部映射展示给用户确认后再提交。
 
 ### 指派人解析（账号或姓名）
 - 写命令的指派人参数（`--assigned-to` / `assign <位置参数>`）可填**账号或姓名**：账号精确 → 姓名精确 → 账号/姓名包含匹配（大小写不敏感）。
@@ -157,7 +158,7 @@ zentao-cli bug comment <id> <内容>
 - 唯一命中：自动采用，`--dry-run` 摘要显示映射 `输入 → 账号（姓名）`——把该映射展示给用户确认。
 - **非 TTY（Agent 场景）多候选会直接报错（退出码 6）**，stderr 列出全部候选 `账号（姓名）`；从中让用户确认后**用精确账号重试**。TTY 下则是编号交互选择。
 - 0 命中报错（退出码 6）并给相近候选建议；用户列表获取失败时纯 ASCII 输入按账号原样直通（stderr 有警告），姓名输入报错。
-- `--mailto`（抄送）仍只接受精确账号，不做解析。
+- `--mailto`（抄送，task/bug create）与指派同规则：逗号分隔/重复多值、账号或姓名解析；`--dry-run` 摘要的「抄送」行展示映射，需一并给用户确认。
 
 ### 状态流转约束
 - `task start`：`--left` 必须 >0（为 0 时禅道会把“开始”当作“完成”并指派回创建人，CLI 直接拒绝）。

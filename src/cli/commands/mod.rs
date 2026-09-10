@@ -77,7 +77,7 @@ pub fn ok() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// 拆分 `--assigned-to` 取值：支持逗号分隔与重复传入；trim、去空、去重保序。
+/// 拆分 `--assigned-to` / `--mailto` 取值：支持逗号分隔与重复传入；trim、去空、去重保序。
 pub fn split_assigned_values(values: &[String]) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for value in values {

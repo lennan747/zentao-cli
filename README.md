@@ -407,13 +407,15 @@ zentao-cli task create <project> --name <名称> [选项...]
 | `--module <id>` | 否 | 所属模块 ID，0=根 |
 | `--assigned-to <账号或姓名>` | 否 | 指派给；多人用逗号分隔或重复本 flag（旧版团队模式）；姓名支持模糊解析 |
 | `--image-url <url>` | 否 | 图片 URL，可重复；以 `<img>` 追加到描述末尾（不走禅道上传）；不可达仅警告不阻断 |
-| `--mailto <账号>` | 否 | 抄送，可多次指定 |
+| `--mailto <账号或姓名>` | 否 | 抄送；多人用逗号分隔或重复本 flag；姓名支持模糊解析 |
 
 ```bash
 zentao-cli task create 101 --name "修复登录页样式" --pri 2 --assigned-to <你的账号>
 ```
 
 > 创建成功回执（两行）：table 格式第一行 `<id>: <标题>`、第二行 Web 链接 `<server>/task-view-<id>.html`（id 用原始数字、不补零，与链接一致）；json 格式 stdout 输出单对象 `{"id","title","url"}`（响应无法解析出新 ID 时 `id` 为 null，table 降级为标题 + 提示）。
+
+> 多人指派：`--assigned-to` 给多人时按旧版团队模式提交（`multiple=1` + 每成员 `team[]`/`teamEstimate[]`，每人预计工时默认 0），禅道中落为多人任务；单人提交不变。成员工时可后续在禅道页面调整（无按人预计参数）。
 
 #### task edit
 
@@ -636,7 +638,7 @@ zentao-cli bug create <product> --title <标题> [选项...]
 | `--type <TYPE>` | 否 | 类型：codeerror/designchange/newfeature/others/optimize/... |
 | `--os <OS>` | 否 | 操作系统：all/windows/win10/android/ios/... |
 | `--browser <browser>` | 否 | 浏览器：all/ie/chrome/firefox/... |
-| `--mailto <账号>` | 否 | 抄送，可多次指定 |
+| `--mailto <账号或姓名>` | 否 | 抄送；多人用逗号分隔或重复本 flag；姓名支持模糊解析 |
 
 ```bash
 zentao-cli bug create 201 --title "登录页报 500" --severity 2 --assigned-to <你的账号>

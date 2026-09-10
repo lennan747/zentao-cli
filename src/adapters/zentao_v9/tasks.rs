@@ -68,6 +68,20 @@ pub(super) fn split_accounts(form: &mut Vec<(String, String)>, name: &str, raw: 
     }
 }
 
+/// 多人创建（旧版团队模式）：成员数 >1 时提交 `multiple=1` 与按索引配对的
+/// `team[]`/`teamEstimate[]`（每人预计工时默认 0，与禅道团队弹窗一致）；
+/// 单人保持裸 `assignedTo[]`，不提交团队字段。
+pub(super) fn push_create_team(form: &mut Vec<(String, String)>, accounts: &[String]) {
+    if accounts.len() <= 1 {
+        return;
+    }
+    form.push(field("multiple", "1"));
+    for account in accounts {
+        form.push(field("team[]", account));
+        form.push(field("teamEstimate[]", "0"));
+    }
+}
+
 /// 从写响应 locate 中提取新对象 ID（如 `…/task-view-123.json`）；无数字 ID 时返回 None。
 pub(super) fn extract_id(locate: &str, prefix: &str) -> Option<String> {
     let start = locate.find(prefix)? + prefix.len();
@@ -239,6 +253,8 @@ impl TaskGateway for ZentaoV9TaskGateway {
         for account in &draft.assigned_to {
             form.push(field("assignedTo[]", account));
         }
+        // 多人时补团队模式字段（multiple=1 + team[]/teamEstimate[] 配对）；落库语义待真实冒烟确认。
+        push_create_team(&mut form, &draft.assigned_to);
         for account in draft.mailto {
             form.push(field("mailto[]", account));
         }
@@ -479,4 +495,34 @@ pub(super) fn pager_info(data: &Value, fallback_total: u64) -> (u64, u64, u64, u
         .and_then(|v| v.as_u64())
         .unwrap_or(if total == 0 { 0 } else { 1 });
     (page, per_page, total_pages, total)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn push_create_team_noop_for_single_or_empty() {
+        for accounts in [Vec::new(), vec!["wangli".to_string()]] {
+            let mut form: Vec<(String, String)> = Vec::new();
+            push_create_team(&mut form, &accounts);
+            assert!(form.is_empty());
+        }
+    }
+
+    #[test]
+    fn push_create_team_pairs_members_with_zero_estimate() {
+        let mut form: Vec<(String, String)> = Vec::new();
+        push_create_team(&mut form, &["wangli".to_string(), "wanglinan".to_string()]);
+        assert_eq!(
+            form,
+            vec![
+                ("multiple".to_string(), "1".to_string()),
+                ("team[]".to_string(), "wangli".to_string()),
+                ("teamEstimate[]".to_string(), "0".to_string()),
+                ("team[]".to_string(), "wanglinan".to_string()),
+                ("teamEstimate[]".to_string(), "0".to_string()),
+            ]
+        );
+    }
 }
