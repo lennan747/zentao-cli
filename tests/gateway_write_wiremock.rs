@@ -450,8 +450,7 @@ async fn task_create_posts_multiple_assigned_to_and_parses_new_id() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/task-create-43.json"))
-        .and(body_string_contains("assignedTo%5B%5D=demo-user"))
-        .and(body_string_contains("assignedTo%5B%5D=wangli"))
+        .and(NotContains("assignedTo%5B%5D=".to_string()))
         .and(body_string_contains("multiple=1"))
         .and(body_string_contains("team%5B%5D=demo-user"))
         .and(body_string_contains("teamEstimate%5B%5D=0"))

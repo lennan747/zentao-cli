@@ -362,6 +362,15 @@ async fn create_multi_assignee_posts_team_fields() {
         .assert()
         .success()
         .stdout(predicates::str::contains("999: 团队任务"));
+
+    let requests = server.received_requests().await.unwrap();
+    let post = requests
+        .iter()
+        .find(|r| r.method == reqwest::Method::POST)
+        .unwrap();
+    let body = String::from_utf8_lossy(&post.body);
+    assert!(body.contains("multiple=1"));
+    assert!(!body.contains("assignedTo%5B%5D="));
 }
 
 #[tokio::test]

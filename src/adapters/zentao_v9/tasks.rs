@@ -249,12 +249,15 @@ impl TaskGateway for ZentaoV9TaskGateway {
         ]) {
             form.push((k, v));
         }
-        // 多人 select（旧版团队模式）：每个指派人一个 assignedTo[] 表单字段。
-        for account in &draft.assigned_to {
-            form.push(field("assignedTo[]", account));
+        // 探针（2026-09-10，task-create 表单页）：多人模式页面隐藏主 assignedTo[] select，
+        // 成员经团队弹窗以 team[]/teamEstimate[] 提交；单人模式才用 assignedTo[]。
+        if draft.assigned_to.len() > 1 {
+            push_create_team(&mut form, &draft.assigned_to);
+        } else {
+            for account in &draft.assigned_to {
+                form.push(field("assignedTo[]", account));
+            }
         }
-        // 多人时补团队模式字段（multiple=1 + team[]/teamEstimate[] 配对）；落库语义待真实冒烟确认。
-        push_create_team(&mut form, &draft.assigned_to);
         for account in draft.mailto {
             form.push(field("mailto[]", account));
         }
