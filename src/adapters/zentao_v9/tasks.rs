@@ -142,6 +142,35 @@ impl ZentaoV9TaskGateway {
             .ok_or(QueryError::IncompatibleResponse)
     }
 
+    /// 按名称在项目任务列表中回查新创建任务的 ID（取最大 ID，同名视为最新）。
+    async fn find_created_task_id(
+        &self,
+        project: &EntityId,
+        name: &str,
+    ) -> Result<Option<String>, QueryError> {
+        let body = self
+            .client
+            .get_text(&Routes::project_task(self.client.server(), &project.0))
+            .await?;
+        let data = parse_body(&body)?;
+        let tasks: Vec<Value> = match data.get("tasks") {
+            Some(Value::Array(items)) => items.clone(),
+            Some(Value::Object(map)) => map.values().cloned().collect(),
+            _ => return Ok(None),
+        };
+        Ok(tasks
+            .iter()
+            .filter(|t| str_field(t, "name") == name)
+            .filter_map(|t| {
+                t.get("id").and_then(|v| {
+                    v.as_str()
+                        .map(str::to_string)
+                        .or_else(|| v.as_u64().map(|n| n.to_string()))
+                })
+            })
+            .max_by_key(|id| id.parse::<u64>().unwrap_or(0)))
+    }
+
     fn summary_from(value: &Value) -> Option<TaskSummary> {
         Some(TaskSummary {
             id: EntityId::from(str_field(value, "id")),
@@ -237,6 +266,7 @@ impl TaskGateway for ZentaoV9TaskGateway {
         project: EntityId,
         draft: TaskDraft,
     ) -> Result<Option<EntityId>, QueryError> {
+        let name = draft.name.clone();
         let mut form = vec![field("name", draft.name)];
         for (k, v) in optional_fields(vec![
             ("desc", draft.desc),
@@ -249,24 +279,24 @@ impl TaskGateway for ZentaoV9TaskGateway {
         ]) {
             form.push((k, v));
         }
-        // 探针（2026-09-10，task-create 表单页）：多人模式页面隐藏主 assignedTo[] select，
-        // 成员经团队弹窗以 team[]/teamEstimate[] 提交；单人模式才用 assignedTo[]。
-        if draft.assigned_to.len() > 1 {
-            push_create_team(&mut form, &draft.assigned_to);
-        } else {
-            for account in &draft.assigned_to {
-                form.push(field("assignedTo[]", account));
-            }
+        // 真实冒烟（2026-09-10）确认：多人必须**同时**提交 assignedTo[] 与团队字段
+        // （multiple=1 + team[]/teamEstimate[] 配对）；仅团队字段时服务端回「保存成功」但不落库。
+        for account in &draft.assigned_to {
+            form.push(field("assignedTo[]", account));
         }
+        push_create_team(&mut form, &draft.assigned_to);
         for account in draft.mailto {
             form.push(field("mailto[]", account));
         }
         let url = Routes::task_create(self.client.server(), &project.0);
         let locate = self.post_write_locate(&url, form).await?;
-        Ok(locate
-            .as_deref()
-            .and_then(|l| extract_id(l, "task-view-"))
-            .map(EntityId::from))
+        let id = match locate.as_deref().and_then(|l| extract_id(l, "task-view-")) {
+            Some(id) => Some(id),
+            // create 的 locate 默认指向项目任务列表页（after=toTaskList），不含新 ID；
+            // 回退为按名称回查项目任务列表取最大 ID（同名取最新）。
+            None => self.find_created_task_id(&project, &name).await?,
+        };
+        Ok(id.map(EntityId::from))
     }
 
     async fn edit_task(&self, id: EntityId, edit: TaskEdit) -> Result<(), QueryError> {

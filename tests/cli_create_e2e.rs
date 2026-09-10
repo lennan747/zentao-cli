@@ -38,6 +38,11 @@ fn wrap_locate(url: &str) -> String {
     format!(r#"{{"status":"success","data":{}}}"#, inner)
 }
 
+fn wrap_data(data_json: &str) -> String {
+    let inner = serde_json::to_string(data_json).unwrap();
+    format!(r#"{{"status":"success","data":{}}}"#, inner)
+}
+
 async fn mount_users(server: &MockServer) {
     Mock::given(method("GET"))
         .and(path("/my-task.json"))
@@ -155,6 +160,16 @@ async fn create_locate_without_id_reports_null_and_hint() {
     Mock::given(method("POST"))
         .and(path("/task-create-43.json"))
         .respond_with(ResponseTemplate::new(200).set_body_string(wrap_locate("/my-task.json")))
+        .expect(2)
+        .mount(&server)
+        .await;
+    // locate 无 ID 时回查项目任务列表；无同名任务 → id 仍为 null。
+    Mock::given(method("GET"))
+        .and(path("/project-task-43.json"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(wrap_data(r#"{"tasks":{"998":{"id":"998","name":"其他"}}}"#)),
+        )
         .expect(2)
         .mount(&server)
         .await;
@@ -370,7 +385,7 @@ async fn create_multi_assignee_posts_team_fields() {
         .unwrap();
     let body = String::from_utf8_lossy(&post.body);
     assert!(body.contains("multiple=1"));
-    assert!(!body.contains("assignedTo%5B%5D="));
+    assert!(body.contains("assignedTo%5B%5D=wangli"));
 }
 
 #[tokio::test]
@@ -453,4 +468,34 @@ async fn bug_create_resolves_mailto() {
         ])
         .assert()
         .success();
+}
+
+#[tokio::test]
+async fn create_falls_back_to_project_list_for_receipt_id() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/task-create-43.json"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_string(wrap_locate("/project-browse-43-task.json")),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/project-task-43.json"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(wrap_data(
+            r#"{"tasks":{"998":{"id":"998","name":"其他"},"999":{"id":"999","name":"回查任务"}}}"#,
+        )))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let home = TempDir::new().unwrap();
+    seed_session(&home, &server.uri());
+
+    zentao(&home)
+        .args(["task", "create", "43", "--name", "回查任务", "--yes"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("999: 回查任务"))
+        .stdout(predicates::str::contains("task-view-999.html"));
 }

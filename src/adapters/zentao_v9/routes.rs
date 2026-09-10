@@ -36,6 +36,10 @@ impl Routes {
         format!("{}/my-task.json", base(server))
     }
 
+    pub fn project_task(server: &str, project: &str) -> String {
+        format!("{}/project-task-{}.json", base(server), project)
+    }
+
     pub fn task_view(server: &str, id: &str) -> String {
         format!("{}/task-view-{}.json", base(server), id)
     }

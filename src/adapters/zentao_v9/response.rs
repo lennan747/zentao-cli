@@ -34,15 +34,26 @@ pub fn parse_body(body: &str) -> Result<Value, QueryError> {
         if segment.is_empty() {
             continue;
         }
-        let envelope: Envelope = serde_json::from_str(segment)
-            .map_err(|e| QueryError::ParseError(format!("invalid envelope segment: {e}")))?;
+        let (data, failed) = match serde_json::from_str::<Envelope>(segment) {
+            Ok(envelope) => {
+                let data: Value = serde_json::from_str(&envelope.data)
+                    .map_err(|e| QueryError::ParseError(format!("data field is not JSON: {e}")))?;
+                (data, envelope.status != "success")
+            }
+            // 裸包络：部分写接口（如 task-create）直接返回 {"result","message","locate"}，
+            // 没有 status/data 外层（2026-09-10 真实环境确认）。
+            Err(_) => {
+                let value: Value = serde_json::from_str(segment).map_err(|e| {
+                    QueryError::ParseError(format!("invalid envelope segment: {e}"))
+                })?;
+                let failed = value.get("result").and_then(|v| v.as_str()) == Some("fail");
+                (value, failed)
+            }
+        };
 
-        if envelope.status != "success" {
+        if failed {
             any_failure = true;
         }
-
-        let data: Value = serde_json::from_str(&envelope.data)
-            .map_err(|e| QueryError::ParseError(format!("data field is not JSON: {e}")))?;
         merged_data = Some(merge_data(merged_data.take(), data));
     }
 
@@ -279,6 +290,25 @@ mod tests {
     fn write_success_with_locate_passes() {
         let body = r#"{"status":"success","data":"{\"locate\":\"https://x/task-view-946.json\"}"}"#;
         assert!(parse_body(body).is_ok());
+    }
+
+    #[test]
+    fn bare_result_envelope_passes() {
+        let body =
+            r#"{"result":"success","message":"保存成功","locate":"\/project-browse-52-task.json"}"#;
+        let value = parse_body(body).unwrap();
+        assert_eq!(value["result"], "success");
+        assert!(value["locate"].as_str().unwrap().contains("project-browse"));
+    }
+
+    #[test]
+    fn bare_result_envelope_fail_is_rejected() {
+        let body = r#"{"result":"fail","message":"\"名称\"不能为空"}"#;
+        let err = parse_body(body).unwrap_err();
+        match err {
+            QueryError::Rejected(msg) => assert!(msg.contains("名称")),
+            other => panic!("expected Rejected, got {other:?}"),
+        }
     }
 
     #[test]

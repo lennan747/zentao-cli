@@ -8,7 +8,12 @@
 
 ### 新增
 
-- 多人任务落库：`task create --assigned-to` 给多人时按旧版团队模式提交（`multiple=1` + 每成员 `team[]`/`teamEstimate[]`，每人预计工时默认 0），禅道中落为多人任务；单人提交不变。
+- 多人任务落库：`task create --assigned-to` 给多人时按旧版团队模式提交（`assignedTo[]` ×N ＋ `multiple=1` + 每成员 `team[]`/`teamEstimate[]`，每人预计工时默认 0），禅道中落为多人任务（`task.team` 含全部成员）；单人提交不变。真实冒烟确认：仅提交团队字段时服务端回「保存成功」但不落库。
+
+### 修复
+
+- create 写响应解析：兼容裸包络 `{"result","message","locate"}`（task-create 真实响应无 `status`/`data` 外层），此前误报「远端响应无法解析」。
+- create 回执新 ID：create 的 locate 指向项目任务列表页（不含新 ID）时，按名称回查项目任务列表取最大 ID 作为回执 ID；回查无同名时维持 `id: null` + 提示。
 
 ### 变更
 

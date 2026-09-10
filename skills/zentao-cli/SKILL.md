@@ -147,8 +147,9 @@ zentao-cli bug comment <id> <内容>
    - `--format json` 下 stdout 为单对象 `{"id","title","url"}`，直接用其中字段拼出上述两行；**id 用原始数字、不补零**，第一行的 id 与第二行 url 里的 `task-view-{id}` / `bug-view-{id}` 是同一个数字。
    - `id` 为 null（响应未解析出新 ID）时，只给标题并说明「未获取到 ID，请在禅道中查看」。
    - table 格式下 CLI 已按这两行打印（首行绿色 `{id}: {标题}`，次行 `{url}`），原样转给用户即可。
+   - `id` 由 CLI 从写响应 locate 或按名称回查项目任务列表得到，Agent 无需自行查询；两者皆无时才为 null。
    - task 与 bug 回执格式一致。
-7. **多人指派**：task create 的 `--assigned-to` 支持逗号分隔/重复；给多人时 CLI 按旧版团队模式提交（`multiple=1` + 每成员 `team[]`/`teamEstimate[]`，每人预计工时 0），禅道落为多人任务；改成员或工时请用禅道页面（CLI 不做团队编辑）。Bug 仅单人，多值会报错（码 6）。
+7. **多人指派**：task create 的 `--assigned-to` 支持逗号分隔/重复；给多人时 CLI 按旧版团队模式提交（`assignedTo[]` ×N ＋ `multiple=1` + 每成员 `team[]`/`teamEstimate[]`，每人预计工时 0），禅道落为多人任务；改成员或工时请用禅道页面（CLI 不做团队编辑）。Bug 仅单人，多值会报错（码 6）。
 8. **图片进描述**：禅道云存储可能已满（上传报"超出空间限制"）——不要走禅道上传，用 `--image-url <外部可访问URL>`（可重复）把图片嵌入描述；CLI 会 HEAD 探测并在不可达时警告。
 9. **自然语言建任务**：用户描述里常含「指派给：A、B、C；抄送给 D、E；要求今天内完成」——把指派给/抄送给的姓名逐个填入 `--assigned-to` / `--mailto`（逗号分隔，CLI 逐个解析姓名→账号），把相对日期换算成 `--deadline YYYY-MM-DD`（"今天内完成"= 当天）；先用 `--dry-run` 把全部映射展示给用户确认后再提交。
 
