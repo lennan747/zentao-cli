@@ -84,6 +84,9 @@ pub struct TaskDetail {
     pub priority: TaskPriority,
     #[serde(default)]
     pub assigned_to: String,
+    /// 任务团队成员账号（按禅道 `order` 排序）；空表示普通单人任务。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub team: Vec<String>,
     #[serde(default)]
     pub desc: String,
     /// 描述中 <img> 图片的绝对 URL 列表（无图片时省略）。
@@ -124,7 +127,9 @@ pub struct TaskDraft {
 pub struct TaskEdit {
     pub name: Option<String>,
     pub desc: Option<String>,
-    pub assigned_to: Option<String>,
+    /// 指派人账号列表（整体替换团队）：`None` 不动指派；`Some(单人)` 转为单人任务（清空团队）；
+    /// `Some(多人)` 转为多人团队任务（每成员预计工时 0）。
+    pub assigned_to: Option<Vec<String>>,
     pub pri: Option<String>,
     pub task_type: Option<String>,
     pub status: Option<String>,

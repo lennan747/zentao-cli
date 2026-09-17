@@ -108,7 +108,15 @@ pub async fn assigned_to(
 /// `Err(code)` 约定同 [`assigned_to`]（错误已打印，或 TTY 取消）。
 pub async fn one(user_gateway: &ZentaoV9UserGateway, raw: &str) -> Result<ResolvedUser, ExitCode> {
     let users = user_gateway.list_users().await;
-    let resolution = match classify(raw, &users) {
+    resolve_one(raw, &users)
+}
+
+/// 用已获取的用户列表解析单个输入；多值场景避免重复拉取用户列表。
+fn resolve_one(
+    raw: &str,
+    users: &Result<Vec<UserSummary>, QueryError>,
+) -> Result<ResolvedUser, ExitCode> {
+    let resolution = match classify(raw, users) {
         Ok(resolution) => resolution,
         Err(e) => return Err(fail(&e)),
     };
@@ -155,14 +163,19 @@ pub async fn one(user_gateway: &ZentaoV9UserGateway, raw: &str) -> Result<Resolv
 
 /// 逐值解析多个输入（逗号拆分由调用方完成）；结果按账号去重保序。
 ///
+/// 用户列表只获取一次，避免每个值各发一次请求。
 /// `Err(code)` 约定同 [`one`]。
 pub async fn many(
     user_gateway: &ZentaoV9UserGateway,
     values: &[String],
 ) -> Result<Vec<ResolvedUser>, ExitCode> {
+    if values.is_empty() {
+        return Ok(Vec::new());
+    }
+    let users = user_gateway.list_users().await;
     let mut resolved = Vec::new();
     for raw in values {
-        resolved.push(one(user_gateway, raw).await?);
+        resolved.push(resolve_one(raw, &users)?);
     }
     Ok(dedupe_by_account(resolved))
 }

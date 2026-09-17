@@ -112,6 +112,150 @@ async fn task_edit_with_team_posts_team_baseline() {
 }
 
 #[tokio::test]
+async fn task_edit_multi_assign_posts_team_fields_with_first_as_assigned() {
+    // 真实环境确认：多人指派必须 multiple=1 + assignedTo=首成员 + 配对工时数组。
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/task-view-946.json"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(task_detail_fixture()))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/task-edit-946.json"))
+        .and(body_string_contains("multiple=1"))
+        .and(body_string_contains("assignedTo=wangli"))
+        .and(body_string_contains("team%5B%5D=wangli"))
+        .and(body_string_contains("team%5B%5D=wanglinan"))
+        .and(body_string_contains("teamEstimate%5B%5D=0"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(locate("/task-view-946.json")))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let gateway = ZentaoV9TaskGateway::new(client(&server).await);
+    gateway
+        .edit_task(
+            EntityId::from("946"),
+            TaskEdit {
+                assigned_to: Some(vec!["wangli".into(), "wanglinan".into()]),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("edit should succeed");
+}
+
+#[tokio::test]
+async fn task_edit_single_assign_clears_team_without_multiple() {
+    // 从多人团队改回单人：只提交 assignedTo，且不带 multiple/team 字段（服务端清空团队）。
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/task-view-946.json"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(fixture_content("task-detail-with-team.json")),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/task-edit-946.json"))
+        .and(body_string_contains("assignedTo=example-user"))
+        .and(NotContains("multiple=1".into()))
+        .and(NotContains("team%5B%5D".into()))
+        .respond_with(ResponseTemplate::new(200).set_body_string(locate("/task-view-946.json")))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let gateway = ZentaoV9TaskGateway::new(client(&server).await);
+    gateway
+        .edit_task(
+            EntityId::from("946"),
+            TaskEdit {
+                assigned_to: Some(vec!["example-user".into()]),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("edit should succeed");
+}
+
+#[tokio::test]
+async fn task_edit_keeps_existing_team_hours_for_retained_members() {
+    // 团队整体替换时，保留成员沿用基线工时，新增成员默认 0。
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/task-view-946.json"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(fixture_content("task-detail-with-team.json")),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/task-edit-946.json"))
+        .and(body_string_contains("team%5B%5D=user1"))
+        .and(body_string_contains("team%5B%5D=wangli"))
+        .and(body_string_contains("teamEstimate%5B%5D=0.00"))
+        .and(body_string_contains("teamConsumed%5B%5D=1.00"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(locate("/task-view-946.json")))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let gateway = ZentaoV9TaskGateway::new(client(&server).await);
+    gateway
+        .edit_task(
+            EntityId::from("946"),
+            TaskEdit {
+                assigned_to: Some(vec!["user1".into(), "wangli".into()]),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("edit should succeed");
+}
+
+#[tokio::test]
+async fn task_edit_preserves_single_member_team_on_unrelated_change() {
+    // 1 人团队也是团队任务：编辑其它字段时必须带 multiple=1 + team[]，否则服务端清空成员。
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/task-view-946.json"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(fixture_content("task-detail-team-single.json")),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/task-edit-946.json"))
+        .and(body_string_contains("multiple=1"))
+        .and(body_string_contains("team%5B%5D=user1"))
+        .and(body_string_contains("teamConsumed%5B%5D=1.00"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(locate("/task-view-946.json")))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let gateway = ZentaoV9TaskGateway::new(client(&server).await);
+    gateway
+        .edit_task(
+            EntityId::from("946"),
+            TaskEdit {
+                deadline: Some("2026-09-30".into()),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("edit should succeed");
+}
+
+#[tokio::test]
 async fn task_edit_with_explicit_status_posts_status() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))

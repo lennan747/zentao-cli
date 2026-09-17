@@ -85,15 +85,15 @@ zentao-cli user search <关键词>             # 账号/姓名包含匹配（大
 ### 任务
 ```bash
 zentao-cli task list [-s wait|doing|done|pause|cancel|closed] [-a me]   # 数据来自「我的任务」；-s 本地过滤；-a 仅支持 me
-zentao-cli task get <id>
+zentao-cli task get <id>                        # 多人任务额外显示「团队成员」行
 zentao-cli task create <项目ID> --name <名称> \
   [--desc 描述] [--pri 1-4] [--type design|devel|test|study|discuss|ui|affair|misc|production|management] \
   [--estimate 小时] [--est-started YYYY-MM-DD] [--deadline YYYY-MM-DD] \
   [--module 模块ID] [--assigned-to 账号或姓名[,账号或姓名...]] [--image-url URL]... [--mailto 账号或姓名[,账号或姓名...]]... 
-zentao-cli task edit <id> [--name] [--desc] [--assigned-to] [--pri 0-4] [--type] \
+zentao-cli task edit <id> [--name] [--desc] [--assigned-to 账号或姓名[,账号或姓名...]] [--pri 0-4] [--type] \
   [--status wait|doing|done|pause|cancel|closed] [--estimate] [--consumed] [--left] \
   [--deadline] [--est-started] [--comment]
-zentao-cli task assign <id> <账号或姓名> [--comment]
+zentao-cli task assign <id> <账号或姓名[,账号或姓名...]> [--comment]   # 多人=整体替换团队
 zentao-cli task start <id> --left <小时> [--consumed] [--real-started "YYYY-MM-DD HH:MM:SS"] [--assigned-to] [--comment]
 zentao-cli task finish <id> --consumed <小时>   # consumed 必填且 >0
 zentao-cli task cancel <id>                     # 取消
@@ -149,12 +149,15 @@ zentao-cli bug comment <id> <内容>
    - table 格式下 CLI 已按这两行打印（首行绿色 `{id}: {标题}`，次行 `{url}`），原样转给用户即可。
    - `id` 由 CLI 从写响应 locate 或按名称回查项目任务列表得到，Agent 无需自行查询；两者皆无时才为 null。
    - task 与 bug 回执格式一致。
-7. **多人指派**：task create 的 `--assigned-to` 支持逗号分隔/重复；给多人时 CLI 按旧版团队模式提交（`assignedTo[]` ×N ＋ `multiple=1` + 每成员 `team[]`/`teamEstimate[]`，每人预计工时 0），禅道落为多人任务；改成员或工时请用禅道页面（CLI 不做团队编辑）。Bug 仅单人，多值会报错（码 6）。
+7. **多人指派**：
+   - `task create --assigned-to`：**必填**（不给指派人时禅道回「保存成功」但实际不创建，CLI 前置拒绝，码 6）。逗号分隔/重复；>1 人时按旧版团队模式提交（`assignedTo[]` ×N ＋ `multiple=1` + 每成员 `team[]`/`teamEstimate[]`，每人预计工时 0），禅道落为多人任务。
+   - `task assign <id> a,b` / `task edit <id> --assigned-to a,b`：同样支持多人，语义为**整体替换团队**——列出的人成为全部成员；给单人则转回单人任务并清空团队；不改指派时保持当前团队。已有成员工时沿用，新增成员 0；改单人成员工时请用禅道页面。
+   - Bug 仅单人，多值会报错（码 6）。
 8. **图片进描述**：禅道云存储可能已满（上传报"超出空间限制"）——不要走禅道上传，用 `--image-url <外部可访问URL>`（可重复）把图片嵌入描述；CLI 会 HEAD 探测并在不可达时警告。
 9. **自然语言建任务**：用户描述里常含「指派给：A、B、C；抄送给 D、E；要求今天内完成」——把指派给/抄送给的姓名逐个填入 `--assigned-to` / `--mailto`（逗号分隔，CLI 逐个解析姓名→账号），把相对日期换算成 `--deadline YYYY-MM-DD`（"今天内完成"= 当天）；先用 `--dry-run` 把全部映射展示给用户确认后再提交。
 
 ### 指派人解析（账号或姓名）
-- 写命令的指派人参数（`--assigned-to` / `assign <位置参数>`）可填**账号或姓名**：账号精确 → 姓名精确 → 账号/姓名包含匹配（大小写不敏感）。
+- 写命令的指派人参数（`--assigned-to` / `assign <位置参数>`）可填**账号或姓名**：账号精确 → 姓名精确 → 账号/姓名包含匹配（大小写不敏感）。多值（逗号/重复）时逐个解析后用一次用户列表查询，不做重复拉取。
 - Agent 不确定账号时，先 `zentao-cli user search <姓名> --format json` 查询；也可以直接填姓名让 CLI 解析。
 - 唯一命中：自动采用，`--dry-run` 摘要显示映射 `输入 → 账号（姓名）`——把该映射展示给用户确认。
 - **非 TTY（Agent 场景）多候选会直接报错（退出码 6）**，stderr 列出全部候选 `账号（姓名）`；从中让用户确认后**用精确账号重试**。TTY 下则是编号交互选择。
@@ -197,5 +200,6 @@ zentao-cli bug comment <id> <内容>
 | 退出码 6 | 参数或远端拒绝 | 核对枚举取值与必填项；重跑并读 stderr |
 | 退出码 6 + 「找到多个匹配」 | 指派人姓名匹配到多个用户 | stderr 已列候选 `账号（姓名）`，与用户确认后用精确账号重试 |
 | 退出码 6 + 「未找到用户」 | 指派人姓名/账号无命中 | 看 stderr 相近候选建议，或 `user search <关键词>` 查询 |
+| 退出码 6 + 「必须指定指派人」 | `task create` 未给 `--assigned-to` | 补上指派人；禅道不指派时不会真正创建任务 |
 | `task start` 被拒 | `--left` 为 0 或缺省为 0 | 显式传 `--left >0` |
 | `task finish` 被拒 | `--consumed` 缺或 0 | 显式传 `--consumed >0` |

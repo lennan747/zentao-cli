@@ -371,3 +371,67 @@ async fn bug_assign_by_name_resolves() {
         .success()
         .stdout(predicates::str::contains("李男 → wanglinan（王李男）"));
 }
+
+#[tokio::test]
+async fn task_assign_accepts_multiple_accounts_and_lists_them() {
+    // 多人指派：逗号分隔 + 重复 flag 均支持，摘要列出全部映射。
+    let server = MockServer::start().await;
+    mount_users(&server).await;
+    let home = TempDir::new().unwrap();
+    seed_session(&home, &server.uri());
+
+    zentao(&home)
+        .args(["task", "assign", "946", "王力,王李男", "--dry-run"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains(
+            "王力 → wangli（王力）, 王李男 → wanglinan（王李男）",
+        ))
+        .stdout(predicates::str::contains("[dry-run]"));
+
+    // dry-run 不写；用户列表只取一次（多值不重复拉取）。
+    let requests = server.received_requests().await.unwrap();
+    assert!(requests.iter().all(|r| r.method == reqwest::Method::GET));
+    assert_eq!(requests.len(), 1);
+}
+
+#[tokio::test]
+async fn task_edit_multi_assign_accepts_repeated_flag() {
+    let server = MockServer::start().await;
+    mount_users(&server).await;
+    let home = TempDir::new().unwrap();
+    seed_session(&home, &server.uri());
+
+    zentao(&home)
+        .args([
+            "task",
+            "edit",
+            "946",
+            "--assigned-to",
+            "王力",
+            "--assigned-to",
+            "王李男",
+            "--dry-run",
+        ])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains(
+            "王力 → wangli（王力）, 王李男 → wanglinan（王李男）",
+        ));
+}
+
+#[tokio::test]
+async fn task_create_without_assignee_is_rejected_before_network() {
+    // 真实环境确认：不指派时服务端回「保存成功」但不落库；CLI 前置拒绝避免误报成功。
+    let server = MockServer::start().await;
+    let home = TempDir::new().unwrap();
+    seed_session(&home, &server.uri());
+
+    zentao(&home)
+        .args(["task", "create", "43", "--name", "无指派任务", "--yes"])
+        .assert()
+        .code(6)
+        .stderr(predicates::str::contains("必须指定指派人"));
+
+    assert_eq!(server.received_requests().await.unwrap().len(), 0);
+}

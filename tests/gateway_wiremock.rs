@@ -299,6 +299,28 @@ async fn task_get_returns_detail() {
 }
 
 #[tokio::test]
+async fn task_get_parses_team_members_in_order() {
+    let server = MockServer::start().await;
+    let _mock = mount(
+        &server,
+        "GET",
+        "/task-view-947.json",
+        fixture("task-detail-with-team.json"),
+    )
+    .await;
+
+    let client = ZentaoV9Client::new(server.uri()).unwrap();
+    let gateway = ZentaoV9TaskGateway::new(client);
+    let detail = gateway
+        .get_task(EntityId::from("947"))
+        .await
+        .expect("task detail");
+
+    // 团队按 order 升序；单人任务 fixture（team=[]) 则为空。
+    assert_eq!(detail.team, vec!["user1", "user2"]);
+}
+
+#[tokio::test]
 async fn bug_list_parses_contract() {
     let server = MockServer::start().await;
     let _mock = mount(

@@ -137,6 +137,8 @@ async fn create_json_receipt_is_single_object() {
             "43",
             "--name",
             "json回执",
+            "--assigned-to",
+            "demo-user",
             "--yes",
         ])
         .assert()
@@ -179,7 +181,16 @@ async fn create_locate_without_id_reports_null_and_hint() {
     // json：id 为 null。
     let output = zentao(&home)
         .args([
-            "--format", "json", "task", "create", "43", "--name", "无ID", "--yes",
+            "--format",
+            "json",
+            "task",
+            "create",
+            "43",
+            "--name",
+            "无ID",
+            "--assigned-to",
+            "demo-user",
+            "--yes",
         ])
         .assert()
         .success()
@@ -191,7 +202,16 @@ async fn create_locate_without_id_reports_null_and_hint() {
 
     // table：dim 提示。
     zentao(&home)
-        .args(["task", "create", "43", "--name", "无ID", "--yes"])
+        .args([
+            "task",
+            "create",
+            "43",
+            "--name",
+            "无ID",
+            "--assigned-to",
+            "demo-user",
+            "--yes",
+        ])
         .assert()
         .success()
         .stdout(predicates::str::contains("未能从响应解析新对象 ID"));
@@ -260,6 +280,8 @@ async fn create_image_url_embeds_desc_and_warns_when_unreachable() {
             &ok_url,
             "--image-url",
             &bad_url,
+            "--assigned-to",
+            "demo-user",
             "--dry-run",
         ])
         .assert()
@@ -283,6 +305,8 @@ async fn create_image_url_embeds_desc_and_warns_when_unreachable() {
             &ok_url,
             "--image-url",
             &bad_url,
+            "--assigned-to",
+            "demo-user",
             "--yes",
         ])
         .assert()
@@ -319,6 +343,8 @@ async fn create_resolves_mailto_names_in_summary_and_form() {
             "抄送任务",
             "--mailto",
             "王力,张三",
+            "--assigned-to",
+            "demo-user",
             "--dry-run",
         ])
         .assert()
@@ -338,6 +364,8 @@ async fn create_resolves_mailto_names_in_summary_and_form() {
             "抄送任务",
             "--mailto",
             "王力,张三",
+            "--assigned-to",
+            "demo-user",
             "--yes",
         ])
         .assert()
@@ -412,6 +440,8 @@ async fn create_mailto_dedupe_account_and_name() {
             "去重抄送",
             "--mailto",
             "wangli,王力",
+            "--assigned-to",
+            "demo-user",
             "--yes",
         ])
         .assert()
@@ -493,7 +523,16 @@ async fn create_falls_back_to_project_list_for_receipt_id() {
     seed_session(&home, &server.uri());
 
     zentao(&home)
-        .args(["task", "create", "43", "--name", "回查任务", "--yes"])
+        .args([
+            "task",
+            "create",
+            "43",
+            "--name",
+            "回查任务",
+            "--assigned-to",
+            "demo-user",
+            "--yes",
+        ])
         .assert()
         .success()
         .stdout(predicates::str::contains("999: 回查任务"))

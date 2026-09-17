@@ -123,9 +123,9 @@ pub struct EditArgs {
     pub name: Option<String>,
     #[arg(long)]
     pub desc: Option<String>,
-    /// 指派人（账号或姓名，支持模糊解析）
-    #[arg(long)]
-    pub assigned_to: Option<String>,
+    /// 指派给（账号或姓名）；多人用逗号分隔或重复本 flag，整体替换团队
+    #[arg(long = "assigned-to")]
+    pub assigned_to: Vec<String>,
     /// 优先级 0-4
     #[arg(long)]
     pub pri: Option<String>,
@@ -157,8 +157,9 @@ pub struct EditArgs {
 pub struct AssignArgs {
     /// 任务 ID
     pub id: String,
-    /// 指派给（账号或姓名，支持模糊解析）
-    pub account: String,
+    /// 指派给（账号或姓名）；多人用逗号分隔或重复本 flag，整体替换团队
+    #[arg(required = true)]
+    pub account: Vec<String>,
     /// 备注/评论
     #[arg(long)]
     pub comment: Option<String>,
@@ -328,6 +329,16 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
                     ));
                 }
             }
+            // 真实环境（2026-09-17）确认：不提交 assignedTo[] 时服务端回「保存成功」
+            // 但不落库（任务实际未创建）。前置拒绝，避免误报创建成功。
+            if super::split_assigned_values(&a.assigned_to).is_empty() {
+                return fail(&ZentaoError::Query(
+                    crate::domain::QueryError::InvalidParameter(
+                        "必须指定指派人（--assigned-to <账号或姓名>）：禅道在不指派时不会真正创建任务"
+                            .into(),
+                    ),
+                ));
+            }
             let resolved =
                 match resolve::many(&user_gateway, &super::split_assigned_values(&a.assigned_to))
                     .await
@@ -421,19 +432,23 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
         }
         TaskCommands::Edit(a) => {
             // 编辑至少要提供一个字段，避免无意义提交。
-            let assigned = match resolve::assigned_to(&user_gateway, a.assigned_to.as_deref()).await
-            {
-                Ok(v) => v,
-                Err(code) => return code,
-            };
+            let assigned =
+                match resolve::many(&user_gateway, &super::split_assigned_values(&a.assigned_to))
+                    .await
+                {
+                    Ok(v) => v,
+                    Err(code) => return code,
+                };
             let assigned_display = assigned
-                .as_ref()
-                .map(|u| u.display.clone())
-                .unwrap_or_default();
+                .iter()
+                .map(|u| u.display.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
             let edit = TaskEdit {
                 name: a.name.clone(),
                 desc: a.desc.clone(),
-                assigned_to: assigned.map(|u| u.account),
+                assigned_to: (!assigned.is_empty())
+                    .then(|| assigned.iter().map(|u| u.account.clone()).collect()),
                 pri: a.pri.clone(),
                 task_type: a.r#type.clone(),
                 status: a.status.clone(),
@@ -476,29 +491,32 @@ pub async fn handle(args: TaskArgs, ctx: &CommandContext) -> ExitCode {
             )
         }
         TaskCommands::Assign(a) => {
-            if a.account.trim().is_empty() {
+            let values = super::split_assigned_values(&a.account);
+            if values.is_empty() {
                 return fail(&ZentaoError::Query(
                     crate::domain::QueryError::InvalidParameter(
                         "指派人（账号或姓名）不能为空".into(),
                     ),
                 ));
             }
-            let resolved = match resolve::assigned_to(&user_gateway, Some(a.account.as_str())).await
-            {
-                Ok(Some(u)) => u,
-                // 上方已校验非空，解析不会返回“未提供”。
-                Ok(None) => return ok(),
+            let resolved = match resolve::many(&user_gateway, &values).await {
+                Ok(users) => users,
                 Err(code) => return code,
             };
+            let display = resolved
+                .iter()
+                .map(|u| u.display.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
             let edit = TaskEdit {
-                assigned_to: Some(resolved.account),
+                assigned_to: Some(resolved.into_iter().map(|u| u.account).collect()),
                 comment: a.comment.clone(),
                 ..Default::default()
             };
             let s = summary(
                 &format!("指派任务 {}", a.id),
                 &[
-                    ("assignedTo", resolved.display.as_str()),
+                    ("assignedTo", display.as_str()),
                     ("comment", a.comment.as_deref().unwrap_or("")),
                 ],
             );

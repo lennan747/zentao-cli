@@ -168,6 +168,8 @@ cp -r skills/zentao-cli ~/.claude/skills/
 | 全量基线 | 编辑类命令（task/bug edit）回读当前对象全部字段再覆盖变更，防止旧版接口清空未提交字段 |
 | 状态前置校验 | start/finish/cancel/close/activate 先回读当前状态，不符直接拒绝（不发出写请求） |
 | `task start` 防护 | left 必须 >0（为 0 时禅道会直接标记完成并指派回创建人），否则拒绝执行 |
+| `task create` 指派人 | 必填 `--assigned-to`：不给指派人时禅道回「保存成功」但不落库，CLI 前置拒绝（退出码 6） |
+| 多人指派 | `task assign` / `task edit --assigned-to` 支持多人（逗号/重复 flag），**整体替换**团队；多人提交 `multiple=1` + `assignedTo=首成员` + 配对 `team*[]` 数组，单人则清空团队 |
 | `task finish` 基线 | `--consumed` 必填且 >0，CLI 自动带之前总计消耗作基线，防止误报"总计消耗必须大于之前消耗" |
 | 指派人解析 | 写命令指派人参数支持账号或姓名（账号精确 → 姓名精确 → 包含匹配，大小写不敏感）。唯一命中自动采用并在摘要显示解析映射 `输入 → 账号（姓名）`；多候选时 TTY 下编号选择、非 TTY 报错并列出候选（退出码 6）；0 命中报错并给相近建议；用户列表获取失败时纯 ASCII 输入按账号原样直通（附警告），姓名输入报错 |
 
@@ -380,7 +382,9 @@ zentao-cli task list --status doing
 zentao-cli task get <id>
 ```
 
-返回字段：id、project_id、project_name、name、status、priority、assigned_to、desc、opened_by、opened_date、deadline、estimate、consumed、left。
+返回字段：id、project_id、project_name、name、status、priority、assigned_to、team、desc、opened_by、opened_date、deadline、estimate、consumed、left。
+
+其中 `team` 为任务团队成员账号数组（按禅道 `order` 升序，空时省略）；表格输出在多人任务下额外显示「团队成员」一行（单人任务不显示）。
 
 ```bash
 zentao-cli task get 1001
@@ -405,7 +409,7 @@ zentao-cli task create <project> --name <名称> [选项...]
 | `--est-started <YYYY-MM-DD>` | 否 | 预计开始日期 |
 | `--deadline <YYYY-MM-DD>` | 否 | 截止日期 |
 | `--module <id>` | 否 | 所属模块 ID，0=根 |
-| `--assigned-to <账号或姓名>` | 否 | 指派给；多人用逗号分隔或重复本 flag（旧版团队模式）；姓名支持模糊解析 |
+| `--assigned-to <账号或姓名>` | **是** | 指派给；多人用逗号分隔或重复本 flag（旧版团队模式）；姓名支持模糊解析。**必填**：禅道在不指派时不会真正创建任务 |
 | `--image-url <url>` | 否 | 图片 URL，可重复；以 `<img>` 追加到描述末尾（不走禅道上传）；不可达仅警告不阻断 |
 | `--mailto <账号或姓名>` | 否 | 抄送；多人用逗号分隔或重复本 flag；姓名支持模糊解析 |
 
@@ -416,6 +420,8 @@ zentao-cli task create 101 --name "修复登录页样式" --pri 2 --assigned-to 
 > 创建成功回执（两行）：table 格式第一行 `<id>: <标题>`、第二行 Web 链接 `<server>/task-view-<id>.html`（id 用原始数字、不补零，与链接一致）；json 格式 stdout 输出单对象 `{"id","title","url"}`。id 优先取写响应 locate；create 的 locate 指向列表页时按名称回查项目任务列表取最大 ID；两者皆无时 `id` 为 null，table 降级为标题 + 提示。
 
 > 多人指派：`--assigned-to` 给多人时按旧版团队模式提交（`assignedTo[]` ×N ＋ `multiple=1` + 每成员 `team[]`/`teamEstimate[]`，每人预计工时默认 0），禅道中落为多人任务；单人提交不变。成员工时可后续在禅道页面调整（无按人预计参数）。
+>
+> **必填指派人**：不给 `--assigned-to` 时禅道会回「保存成功」但**实际不创建任务**，CLI 因此前置拒绝（退出码 6）；创建后可回读确认。
 
 #### task edit
 
@@ -430,7 +436,7 @@ zentao-cli task edit <id> [选项...]
 | `<id>` | 是 | 任务 ID |
 | `--name <名称>` | 否 | 任务名称 |
 | `--desc <描述>` | 否 | 任务描述 |
-| `--assigned-to <账号或姓名>` | 否 | 指派人，姓名支持模糊解析 |
+| `--assigned-to <账号或姓名>` | 否 | 指派给；多人用逗号分隔或重复本 flag，**整体替换**团队；姓名支持模糊解析 |
 | `--pri <0-4>` | 否 | 优先级 |
 | `--type <TYPE>` | 否 | 类型（同 create） |
 | `--status <status>` | 否 | 状态：wait/doing/done/pause/cancel/closed。仅当你显式指定时才提交（避免触发工作流校验） |
@@ -443,26 +449,31 @@ zentao-cli task edit <id> [选项...]
 
 > 编辑会连同当前对象全部字段基线一并提交。禅道旧版接口对未提交的字段会按空值处理（清空），详细说明见「通用」安全护栏。
 
+> 指派为**整体替换**团队语义：`--assigned-to` 给多人 → 团队任务（列出的人成为全部成员；已有成员的工时沿用，新增成员为 0）；给单人 → 转回单人任务并清空团队；不给 → 保持当前团队不变。
+
 ```bash
 zentao-cli task edit 1001 --deadline 2026-06-16 --comment "调整排期"
+zentao-cli task edit 1001 --assigned-to 张三,李四   # 改为多人团队任务
 ```
 
 #### task assign
 
-指派任务（通过编辑接口提交 `assignedTo`）。
+指派任务（通过编辑接口提交指派字段，**整体替换**团队）。
 
 ```
-zentao-cli task assign <id> <账号或姓名> [--comment <备注>]
+zentao-cli task assign <id> <账号或姓名>[,<账号或姓名>...] [--comment <备注>]
 ```
 
 | 选项 | 必填 | 说明 |
 |---|---|---|
 | `<id>` | 是 | 任务 ID |
-| `<账号或姓名>` | 是 | 指派给（位置参数），姓名支持模糊解析 |
+| `<账号或姓名>` | 是 | 指派给（位置参数）；多人用逗号分隔或重复本参数；姓名支持模糊解析 |
 | `--comment <备注>` | 否 | 附带评论 |
 
 ```bash
 zentao-cli task assign 1001 <你的账号> --comment "你来跟进"
+zentao-cli task assign 1001 "张三,李四"        # 指派给多人（团队任务）
+zentao-cli task assign 1001 "张三"             # 改回单人（清空团队）
 ```
 
 #### task start

@@ -68,6 +68,68 @@ pub(super) fn split_accounts(form: &mut Vec<(String, String)>, name: &str, raw: 
     }
 }
 
+/// 从任务 JSON 的 `team` 字段提取成员账号，按 `order` 升序。
+///
+/// `team` 可能是对象（account → 成员详情）或已展开的数组；空/缺失返回空 Vec。
+pub(super) fn team_accounts(task: &Value) -> Vec<String> {
+    let rows = team_rows(task);
+    if !rows.is_empty() {
+        return rows.into_iter().map(|(account, ..)| account).collect();
+    }
+    let mut items: Vec<(u64, String)> = match task.get("team") {
+        Some(Value::Array(members)) => members
+            .iter()
+            .filter_map(|member| {
+                let account = str_field(member, "account");
+                (!account.is_empty()).then(|| (member_order(member), account))
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
+    items.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    items.into_iter().map(|(_, account)| account).collect()
+}
+
+/// 读取成员的 `order`（字符串或数字），缺失/非法按 0。
+fn member_order(member: &Value) -> u64 {
+    member
+        .get("order")
+        .and_then(|o| {
+            o.as_u64()
+                .or_else(|| o.as_str().and_then(|s| s.parse::<u64>().ok()))
+        })
+        .unwrap_or(0)
+}
+
+/// 当前团队成员基线：`(账号, 预计, 消耗, 剩余)`，按 `order` 升序。
+fn team_rows(task: &Value) -> Vec<(String, String, String, String)> {
+    let Some(team) = task.get("team").and_then(|v| v.as_object()) else {
+        return Vec::new();
+    };
+    let text = |member: &Value, key: &str| -> String {
+        member
+            .get(key)
+            .map(|v| v.as_str().unwrap_or_default().to_string())
+            .unwrap_or_default()
+    };
+    let mut rows: Vec<(u64, String, String, String, String)> = team
+        .iter()
+        .map(|(account, member)| {
+            (
+                member_order(member),
+                account.clone(),
+                text(member, "estimate"),
+                text(member, "consumed"),
+                text(member, "left"),
+            )
+        })
+        .collect();
+    rows.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    rows.into_iter()
+        .map(|(_, account, estimate, consumed, left)| (account, estimate, consumed, left))
+        .collect()
+}
+
 /// 多人创建（旧版团队模式）：成员数 >1 时提交 `multiple=1` 与按索引配对的
 /// `team[]`/`teamEstimate[]`（每人预计工时默认 0，与禅道团队弹窗一致）；
 /// 单人保持裸 `assignedTo[]`，不提交团队字段。
@@ -79,6 +141,48 @@ pub(super) fn push_create_team(form: &mut Vec<(String, String)>, accounts: &[Str
     for account in accounts {
         form.push(field("team[]", account));
         form.push(field("teamEstimate[]", "0"));
+    }
+}
+
+/// 编辑表单的指派字段（真实环境 2026-09-17 探测确认）：
+///
+/// - 团队模式：`multiple=1` + `assignedTo=<首成员>` + 按序配对的
+///   `team[]`/`teamEstimate[]`/`teamConsumed[]`/`teamLeft[]`。
+///   `assignedTo` 必须属于团队，否则服务端拒绝「多人任务不能指派给任务团队外的成员」。
+/// - 单人模式：仅 `assignedTo=<账号>`，不提交 `multiple`/`team*`，服务端会清空团队。
+///
+/// `baseline` 为当前团队成员的 `(账号, 预计, 消耗, 剩余)`；沿用成员的工时报原值，
+/// 新增成员按 0（团队弹窗行为）。
+///
+/// `team_mode` 决定提交形态：显式指派时由人数决定（>1 为团队，1 为单人）；
+/// 未指派时按当前是否为团队任务保留原形态（**1 人团队也是团队任务**，
+/// 不能降级为 `multiple` 缺失，否则会丢失团队结构）。
+pub(super) fn push_edit_assigned(
+    form: &mut Vec<(String, String)>,
+    accounts: &[String],
+    baseline: &[(String, String, String, String)],
+    team_mode: bool,
+) {
+    let Some(first) = accounts.first() else {
+        return;
+    };
+    override_fields(form, vec![("assignedTo", Some(first.clone()))]);
+    if !team_mode {
+        return;
+    }
+    form.push(field("multiple", "1"));
+    for account in accounts {
+        let hours = baseline.iter().find(|(a, ..)| a == account);
+        form.push(field("team[]", account));
+        for (idx, key) in ["teamEstimate[]", "teamConsumed[]", "teamLeft[]"]
+            .into_iter()
+            .enumerate()
+        {
+            let value = hours
+                .map(|row| [&row.1, &row.2, &row.3][idx].clone())
+                .unwrap_or_else(|| "0".to_string());
+            form.push((key.to_string(), value));
+        }
     }
 }
 
@@ -199,6 +303,7 @@ impl ZentaoV9TaskGateway {
             status: enum_field::<TaskStatus>(task, "status"),
             priority: enum_field::<TaskPriority>(task, "pri"),
             assigned_to: str_field(task, "assignedTo"),
+            team: team_accounts(task),
             desc_images: super::normalize::resolve_image_urls(&raw_desc, server),
             desc: super::normalize::strip_html(&raw_desc),
             opened_by: str_field(task, "openedBy"),
@@ -331,28 +436,22 @@ impl TaskGateway for ZentaoV9TaskGateway {
         if let Some(mailto) = raw.get("mailto").and_then(|v| v.as_str()) {
             split_accounts(&mut form, "mailto[]", mailto);
         }
-        // 多人任务团队基线：成员与工时数组必须一并提交，否则成员会被清空。
-        if let Some(team) = raw.get("team").and_then(|v| v.as_object()) {
-            let mut rows: Vec<_> = team.iter().collect();
-            rows.sort_by_key(|(_, m)| {
-                m.get("order")
-                    .and_then(|o| o.as_str())
-                    .and_then(|s| s.parse::<u32>().ok())
-                    .unwrap_or(0)
-            });
-            if !rows.is_empty() {
-                form.push(field("multiple", "1"));
-                for (account, member) in rows {
-                    form.push(field("team[]", account));
-                    let num = |k: &str| -> String {
-                        member
-                            .get(k)
-                            .map(|v| v.as_str().unwrap_or_default().to_string())
-                            .unwrap_or_default()
-                    };
-                    form.push(("teamEstimate[]".to_string(), num("estimate")));
-                    form.push(("teamConsumed[]".to_string(), num("consumed")));
-                    form.push(("teamLeft[]".to_string(), num("left")));
+        let team_rows = team_rows(&raw);
+        // 是否维持团队模式：显式指派时由人数决定（>1 为团队）；未指派时按当前是否已有团队
+        // 保留原形态。注意 `task-view` 不返回 `multiple`，唯一的团队标志是**非空 `team`**；
+        // 1 人团队也是团队任务，缺 `multiple=1` 会被服务端清空成员。
+        let is_team_task = !team_rows.is_empty();
+        match edit.assigned_to.clone() {
+            // 显式指派：整体替换团队（多人=团队任务，单人=转回单人并清空团队）。
+            Some(accounts) => {
+                let team_mode = accounts.len() > 1;
+                push_edit_assigned(&mut form, &accounts, &team_rows, team_mode);
+            }
+            // 未指定指派：把当前团队作为基线一并提交，否则成员会被清空。
+            None => {
+                if !team_rows.is_empty() {
+                    let accounts: Vec<String> = team_rows.iter().map(|(a, ..)| a.clone()).collect();
+                    push_edit_assigned(&mut form, &accounts, &team_rows, is_team_task);
                 }
             }
         }
@@ -361,7 +460,6 @@ impl TaskGateway for ZentaoV9TaskGateway {
             vec![
                 ("name", edit.name),
                 ("desc", edit.desc),
-                ("assignedTo", edit.assigned_to),
                 ("pri", edit.pri),
                 ("type", edit.task_type),
                 ("status", edit.status),

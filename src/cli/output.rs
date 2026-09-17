@@ -226,6 +226,7 @@ fn field_label(key: &str) -> &str {
         "begin" => "开始日期",
         "end" => "结束日期",
         "assignedTo" | "assigned_to" => "指派给",
+        "team" => "团队成员",
         "mailto" => "抄送",
         "account" => "账号",
         "realname" => "姓名",
@@ -336,6 +337,7 @@ pub fn print_value<T: Serialize>(
                     let mut cell_value = match key.as_str() {
                         "status" => status_value_label(&raw).unwrap_or(&raw).to_string(),
                         "history" => history_cell(val),
+                        "team" => join_string_list(val),
                         _ => raw,
                     };
                     // 富文本内嵌图片：URL 追加为该单元格的独立行（与禅道页面一致）
@@ -397,6 +399,7 @@ fn key_display_order(key: &str) -> usize {
         "priority",
         "pri",
         "assigned_to",
+        "team",
         "estimate",
         "consumed",
         "left",
@@ -522,6 +525,18 @@ fn value_cell(value: &Value) -> String {
         Value::String(s) => s.clone(),
         Value::Null => String::new(),
         other => serde_json::to_string(other).unwrap_or_default(),
+    }
+}
+
+/// 字符串数组渲染为顿号分隔的单行文本（如团队成员账号列表）。
+fn join_string_list(value: &Value) -> String {
+    match value {
+        Value::Array(items) => items
+            .iter()
+            .filter_map(|x| x.as_str())
+            .collect::<Vec<_>>()
+            .join("、"),
+        other => value_cell(other),
     }
 }
 
