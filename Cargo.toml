@@ -17,7 +17,7 @@ async-trait = "0.1"
 clap = { version = "4", features = ["derive"] }
 comfy-table = "7"
 crossterm = "0.29"
-directories = "5"
+directories = "6"
 flate2 = "1"
 html-escape = "0.2"
 md-5 = "0.10"
